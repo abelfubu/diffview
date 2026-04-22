@@ -209,6 +209,7 @@ export const IGNORED_FILES = [
   "poetry.lock",
   "Gemfile.lock",
   "composer.lock",
+  "snapshot.json",
 ];
 
 export interface ParsedFile {
