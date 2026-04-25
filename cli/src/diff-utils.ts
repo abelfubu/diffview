@@ -210,6 +210,7 @@ export const IGNORED_FILES = [
   "Gemfile.lock",
   "composer.lock",
   "snapshot.json",
+  "worker-configuration.d.ts",
 ];
 
 export interface ParsedFile {

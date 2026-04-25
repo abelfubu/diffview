@@ -4,6 +4,8 @@
 
 2. **Added a real rendering regression test for the shared `cli/src/database.ts` patch** — the test now verifies that `DiffView` still tokenizes later lines like `import dedent from "string-dedent"` and `const endpoint = ... || "unknown"` after boundary repair.
 
+3. **Hide generated `worker-configuration.d.ts` files from diff views by default** — critique now ignores Wrangler's generated worker config type file the same way it already ignores lockfiles and other generated artifacts, so reviews stay focused on meaningful source changes.
+
 # 0.1.139
 
 1. **Fixed block comment leak across later diff hunks** (`critique`, `critique --web`, `critique review`) — TypeScript and other `/* */`-style comment diffs now stay syntax-highlighted when a hunk contains an earlier `*/` and later reopens a comment with `/**` or `/*`. Critique now walks asymmetric comment tokens in order instead of only comparing open/close counts, so hunks that both close an earlier comment and open a new one get a synthetic trailing `*/` appended before the next hunk is rendered.
