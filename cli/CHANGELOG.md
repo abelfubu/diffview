@@ -2,9 +2,9 @@
 
 1. **Fixed TypeScript syntax highlighting for hunks that start inside template literals or docstrings** (`critique`, `critique --web`, `critique review`) — critique now keeps the real boundary closer/opener and adds the missing paired token on an existing line instead of escaping the real token. This preserves tree-sitter state for later lines in the hunk, which fixes cases like the shared `cli/src/database.ts` patch where syntax coloring previously fell back to plain white text.
 
-2. **Added a real rendering regression test for the shared `cli/src/database.ts` patch** — the test now verifies that `DiffView` still tokenizes later lines like `import dedent from "string-dedent"` and `const endpoint = ... || "unknown"` after boundary repair.
+2. **Fixed `--open` on Windows and clarified temp-file help text** — `critique --open` now launches the default browser correctly on Windows, and the `--pdf`, `review --pdf`, and `--image` help text now describes platform-agnostic temp-file locations instead of hardcoding `/tmp`.
 
-3. **Hide generated `worker-configuration.d.ts` files from diff views by default** — critique now ignores Wrangler's generated worker config type file the same way it already ignores lockfiles and other generated artifacts, so reviews stay focused on meaningful source changes.
+3. **Hide generated artifacts from diff views by default** — critique now ignores both `snapshot.json` and Wrangler's generated `worker-configuration.d.ts` file the same way it already ignores lockfiles, keeping reviews focused on meaningful source changes.
 
 # 0.1.139
 
