@@ -36,6 +36,8 @@ bun run src/cli.tsx web
 
 NEVER use `tsc --noEmit` in this repo. Always run emitting builds so `cli/dist` stays updated.
 
+after every code change, run `bun run build` from `cli/` to make sure it compiles. fix any type errors before moving on.
+
 NEVER use require. just import at the top of the file with esm
 
 use bun add to install packages instead of npm
