@@ -7,6 +7,10 @@ import { getDataPaths } from "@opentuah/core"
 import { DiffView } from "./diff-view.js"
 import { useAppStore } from "../store.js"
 
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined
+}
+
 // Suppress EventTarget memory leak warning from opentui DataPathsManager —
 // each DiffView registers a paths:changed listener during tree-sitter init
 getDataPaths().setMaxListeners(50)
@@ -29,6 +33,106 @@ index 1111111..2222222 100644
 -const value = oldName + 1
 +const value = newName + 1
 `
+
+const databaseRegressionDiff = `--- cli/src/database.ts
++++ cli/src/database.ts
+@@ -9,17 +9,18 @@
+ import dedent from "string-dedent";
+ import { browserLogin } from "./tinybird-browser-login.ts";
+ import { loadTinybirdResources } from "./tinybird-resources.ts";
+ import { deployTinybirdResources, getDeploymentManagedReadToken, TinybirdClient } from "./tinybird.ts";
+ import { requireAuth } from "./config.ts";
+ import { getApiClient } from "./api-client.ts";
+-import { ensureDefaultOrg } from "./projects.ts";
++import { resolveCurrentOrg } from "./orgs.ts";
+ 
+ export interface DatabaseCreateOptions {
+   token?: string;
+   baseUrl?: string;
++  force?: boolean;
+ }
+ 
+ function getTinybirdEnvAuth() {
+   const token = process.env.TINYBIRD_TOKEN || process.env.TB_TOKEN
+   const baseUrl = process.env.TINYBIRD_BASE_URL || process.env.TINYBIRD_HOST || process.env.TB_HOST
+   if (!token) return null
+@@ -47,12 +48,13 @@
+ 
+       For non-interactive Tinybird auth, pass --token and --base-url directly.
+      \`,
+   )
+   .option("-t, --token [token]", "Tinybird workspace admin token (skips browser login)")
+   .option("-u, --base-url [url]", "Tinybird API base URL (e.g. https://api.us-east.aws.tinybird.co)")
++  .option("-f, --force", "Overwrite existing database config without confirmation")
+   .example("# Interactive setup (opens browser)")
+   .example("strada database create")
+   .example("# Non-interactive with existing token")
+   .example("strada database create --token p.eyXXX --base-url https://api.tinybird.co")
+   .action((options, context) => databaseCreateAction(options, context));
+ 
+@@ -84,19 +86,46 @@
+     clack.log.error((e as Error).message);
+     return proc.exit(1);
+   }
+ 
+   // Create a default personal org on first use so \`strada login\` -> \`strada database create\`
+   // works end to end without a manual org bootstrap step.
+-  const org = await ensureDefaultOrg().catch((error) => error as Error);
++  const org = await resolveCurrentOrg().catch((error) => error as Error);
+   if (org instanceof Error) {
+     clack.log.error(org.message);
+     return proc.exit(1);
+   }
+   clack.log.info(\`Using organization: \${cyan(org.name)}\`);
+ 
++  // Check if this org already has a configured database. If so, require
++  // explicit confirmation (interactive) or --force (non-interactive) to
++  // prevent accidental overwrites of Tinybird tokens.
++  if (!options.force) {
++    const { safeFetch: checkFetch } = getApiClient();
++    const existingDb = await checkFetch("/api/v0/orgs/:orgId/database", {
++      params: { orgId: org.id },
++    });
++    if (!(existingDb instanceof Error) && (existingDb.hasAdminToken || existingDb.hasReadToken)) {
++      const endpoint = existingDb.tinybirdEndpoint || existingDb.clickhouseUrl || "unknown";
++      if (!process.stdin.isTTY) {
++        clack.log.error(
++          \`This org already has a configured \${existingDb.backend} database (\${endpoint}).\\n\` +
++          \`  Pass --force to overwrite it.\`,
++        );
++        return proc.exit(1);
++      }
++      const overwrite = await clack.confirm({
++        message: \`This org already has a configured \${existingDb.backend} database (\${endpoint}). Overwrite it?\`,
++      });
++      if (clack.isCancel(overwrite) || !overwrite) {
++        clack.outro("Cancelled. Existing database config is unchanged.");
++        return proc.exit(0);
++      }
++    }
++  }
++
+   // Authenticate with Tinybird
+   const auth = await (async () => {
+     if (options.token && options.baseUrl) {
+       clack.log.info(\`Using provided token for \${options.baseUrl}\`);
+       return { token: options.token, baseUrl: options.baseUrl };
+     }
+@@ -235,13 +264,13 @@
+     requireAuth();
+   } catch (e) {
+     clack.log.error((e as Error).message);
+     return proc.exit(1);
+   }
+ 
+-  const org = await ensureDefaultOrg().catch((error) => error as Error);
++  const org = await resolveCurrentOrg().catch((error) => error as Error);
+   if (org instanceof Error) {
+     clack.log.error(org.message);
+     return proc.exit(1);
+   }
+   clack.log.info(\`Using organization: \${cyan(org.name)}\`);
+ `
 
 function ThemeToggleHarness() {
   const themeName = useAppStore((s) => s.themeName)
@@ -53,7 +157,7 @@ function extractDiffBackgroundSample(frame: any) {
 
 function getLineWithToken(frame: any, token: string) {
   return frame.lines.find((line: any) =>
-    line.spans.some((span: any) => span.text.includes(token)),
+    line.spans.map((span: any) => span.text).join("").includes(token),
   )
 }
 
@@ -93,8 +197,15 @@ function getWordHighlightDistance(frame: any) {
 // testRender sets IS_REACT_ACT_ENVIRONMENT=true, so we must disable it after.
 async function setupTest(jsx: React.ReactElement, opts: { width: number; height: number }) {
   const setup = await testRender(jsx, opts)
-  ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = false
+  globalThis.IS_REACT_ACT_ENVIRONMENT = false
   return setup
+}
+
+async function renderSeveralTimes(testSetup: Awaited<ReturnType<typeof testRender>>, times: number) {
+  for (let index = 0; index < times; index++) {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await testSetup.renderOnce()
+  }
 }
 
 describe("DiffView", () => {
@@ -212,5 +323,33 @@ describe("DiffView", () => {
     const highlights = getWordHighlightDistance(testSetup.captureSpans())
     expect(highlights.removed).toBeGreaterThan(0.01)
     expect(highlights.added).toBeGreaterThan(0.01)
+  })
+
+  it("preserves syntax highlighting for hunks that start inside a template literal", async () => {
+    testSetup = await setupTest(
+      <DiffView
+        diff={databaseRegressionDiff}
+        view="unified"
+        filetype="typescript"
+        themeName="github"
+      />,
+      {
+        width: 220,
+        height: 120,
+      },
+    )
+
+    await renderSeveralTimes(testSetup, 5)
+
+    const frame = testSetup.captureSpans()
+    const importLine = getLineWithToken(frame, 'import dedent from "string-dedent"')
+    const endpointLine = getLineWithToken(frame, 'const endpoint = existingDb.tinybirdEndpoint')
+
+    expect(importLine?.spans.map((span: any) => span.text).filter((text: string) => text.trim() !== "")).toEqual(
+      expect.arrayContaining(["import", "dedent", "from", '"string-dedent"']),
+    )
+    expect(endpointLine?.spans.map((span: any) => span.text).filter((text: string) => text.trim() !== "")).toEqual(
+      expect.arrayContaining(["const", "endpoint", "=", '"unknown"']),
+    )
   })
 })

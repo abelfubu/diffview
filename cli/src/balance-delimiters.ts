@@ -7,15 +7,19 @@
 // Boundary repair strategy:
 //   1. Tokenizer: count delimiter occurrences in each hunk's content,
 //      skipping escaped characters.
-//   2. Repair symmetric delimiters by escaping the unmatched boundary token.
+//   2. Repair symmetric delimiters by inserting a synthetic opening/closing
+//      token on an existing content line so the real boundary token can still
+//      pair and reset parser state.
 //   3. Repair asymmetric delimiters by appending the closing token to the
 //      last content line in the hunk so later hunks do not inherit state.
 //
-// For strings/docstrings, repairing the actual unmatched token is safer than
-// prepending a synthetic opener because it keeps the mutation local and avoids
-// duplicating delimiters like ``` -> ``````. Markdown fences are the exception:
-// their contextual open/close classification lets us safely add inline fence
-// context without rewriting hunk headers.
+// For strings/docstrings, the real boundary token still matters. Escaping a
+// closing token that actually ends an outer template/docstring leaves the
+// parser stuck inside that string and kills highlighting for the rest of the
+// hunk. Instead, synthesize the missing pair on an existing line and keep the
+// original closer/opener intact. Markdown fences are the exception: their
+// contextual open/close classification lets us safely add inline fence context
+// without rewriting hunk headers.
 
 type BoundaryKind = "open" | "close" | "unknown"
 
@@ -267,18 +271,6 @@ function classifyOccurrence(
   }
 
   return "unknown"
-}
-
-function escapeDelimiterAt(lines: readonly string[], hunkLineIndex: number, column: number): string[] {
-  return lines.map((line, index) => {
-    if (index !== hunkLineIndex || !isDiffContentLine(line)) {
-      return line
-    }
-
-    const prefix = line[0] ?? ""
-    const content = line.slice(1)
-    return prefix + content.slice(0, column) + "\\" + content.slice(column)
-  })
 }
 
 // ---------------------------------------------------------------------------
@@ -600,8 +592,8 @@ function prependOpeningTokenToFirstContentLine(
  * delimiter occurrences.
  *
  * Pass 2 (repair): if a hunk has an odd count for any symmetric delimiter,
- * classify the unmatched boundary token as a likely opener or closer and
- * escape that token in place.
+ * classify the unmatched boundary token as a likely opener or closer and add
+ * the missing paired token on an existing content line.
  *
  * Pass 3 (hunk isolation): if a hunk leaves an asymmetric delimiter open,
  * append its closing token to the last content line so the next hunk starts
@@ -661,12 +653,12 @@ export function balanceDelimiters(rawDiff: string, filetype?: string): string {
       const lastBoundary = classifyOccurrence(contentLines, last, rule.token)
 
       if (firstBoundary === "close") {
-        repairedLines = escapeDelimiterAt(repairedLines, first.hunkLineIndex, first.column)
+        repairedLines = prependOpeningTokenToFirstContentLine(repairedLines, rule.token, first.hunkLineIndex)
         break
       }
 
       if (lastBoundary === "open") {
-        repairedLines = escapeDelimiterAt(repairedLines, last.hunkLineIndex, last.column)
+        repairedLines = appendClosingTokensToLastContentLine(repairedLines, rule.token, 1)
         break
       }
     }

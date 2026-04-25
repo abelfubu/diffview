@@ -1,3 +1,9 @@
+# 0.1.140
+
+1. **Fixed TypeScript syntax highlighting for hunks that start inside template literals or docstrings** (`critique`, `critique --web`, `critique review`) — critique now keeps the real boundary closer/opener and adds the missing paired token on an existing line instead of escaping the real token. This preserves tree-sitter state for later lines in the hunk, which fixes cases like the shared `cli/src/database.ts` patch where syntax coloring previously fell back to plain white text.
+
+2. **Added a real rendering regression test for the shared `cli/src/database.ts` patch** — the test now verifies that `DiffView` still tokenizes later lines like `import dedent from "string-dedent"` and `const endpoint = ... || "unknown"` after boundary repair.
+
 # 0.1.139
 
 1. **Fixed block comment leak across later diff hunks** (`critique`, `critique --web`, `critique review`) — TypeScript and other `/* */`-style comment diffs now stay syntax-highlighted when a hunk contains an earlier `*/` and later reopens a comment with `/**` or `/*`. Critique now walks asymmetric comment tokens in order instead of only comparing open/close counts, so hunks that both close an earlier comment and open a new one get a synthetic trailing `*/` appended before the next hunk is rendered.
