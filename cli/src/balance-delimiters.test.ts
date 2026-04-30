@@ -46,6 +46,10 @@ describe("countDelimiter", () => {
       expect(countDelimiter("const url = `${protocol}://${host}:${port}${path}`", "`")).toBe(2)
     })
 
+    it("ignores backticks inside quoted string fragments", () => {
+      expect(countDelimiter("const code = `${'`'}Hello ${'${'}name${'}'}${'`'}`", "`")).toBe(2)
+    })
+
     it("handles empty string", () => {
       expect(countDelimiter("", "`")).toBe(0)
     })
@@ -224,6 +228,42 @@ describe("balanceDelimiters", () => {
         "+const y = 3",
       ])
       expect(balanceDelimiters(patch, "typescript")).toBe(patch)
+    })
+
+    it("prepends a synthetic opener for the safe-mdx template literal hunk", () => {
+      const patch = [
+        "--- src/safe-mdx.test.tsx",
+        "+++ src/safe-mdx.test.tsx",
+        "@@ -3850,6 +3850,21 @@ test('scope with .map and arrow function callback works with generate', () => {",
+        "     `",
+        " ",
+        "     const { html, errors } = render(code, undefined, undefined, undefined, scope, { generate })",
+        "     expect(errors).toMatchInlineSnapshot(`[]`)",
+        "     expect(html).toMatchInlineSnapshot(`\"Alice, Bob, Charlie\"`)",
+        " })",
+        "+",
+        "+test('scope with template literal in expression', () => {",
+        "+    const scope = {",
+        "+        name: 'World',",
+        "+        count: 3,",
+        "+    }",
+        "+",
+        "+    const code = dedent`",
+        "+        {${'`'}Hello ${'${'}name${'}'}, you have ${'${'}count${'}'} items${'`'}}",
+        "+    `",
+        "+",
+        "+    const { html, errors } = render(code, undefined, undefined, undefined, scope)",
+        "+    expect(errors).toMatchInlineSnapshot(`[]`)",
+        "+    expect(html).toMatchInlineSnapshot(`\"Hello World, you have 3 items\"`)",
+        "+})",
+      ].join("\n")
+
+      const result = balanceDelimiters(patch, "typescript")
+      const lines = result.split("\n")
+
+      expect(lines[3]).toBe(" `     `")
+      expect(lines[17]).toBe("+        {${'`'}Hello ${'${'}name${'}'}, you have ${'${'}count${'}'} items${'`'}}")
+      expect(() => parsePatch(result)).not.toThrow()
     })
 
     it("keeps patch unchanged for regex literals with backticks", () => {

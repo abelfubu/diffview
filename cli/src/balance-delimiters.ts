@@ -70,6 +70,29 @@ const LANGUAGE_DELIMITERS: Record<string, DelimiterRule[]> = {
   julia: [{ token: '"""' }],
 }
 
+function isQuotedBacktickLiteral(code: string, column: number): boolean {
+  const quote = code[column - 1]
+  return (quote === "'" || quote === '"') && code[column + 1] === quote
+}
+
+function findDelimiterColumns(code: string, delimiter: string): number[] {
+  const columns: number[] = []
+  const len = delimiter.length
+
+  for (let i = 0; i < code.length; i++) {
+    if (code[i] === "\\") {
+      i++
+    } else if (code.startsWith(delimiter, i)) {
+      if (!(delimiter === "`" && isQuotedBacktickLiteral(code, i))) {
+        columns.push(i)
+      }
+      i += len - 1
+    }
+  }
+
+  return columns
+}
+
 /**
  * Count unescaped occurrences of a delimiter in a code string.
  *
@@ -78,19 +101,7 @@ const LANGUAGE_DELIMITERS: Record<string, DelimiterRule[]> = {
  * Handles both single-char (`) and multi-char (""") delimiters.
  */
 export function countDelimiter(code: string, delimiter: string): number {
-  let count = 0
-  const len = delimiter.length
-
-  for (let i = 0; i < code.length; i++) {
-    if (code[i] === "\\") {
-      i++
-    } else if (code.startsWith(delimiter, i)) {
-      count++
-      i += len - 1
-    }
-  }
-
-  return count
+  return findDelimiterColumns(code, delimiter).length
 }
 
 interface DiffHunk {
@@ -129,24 +140,12 @@ function findDelimiterOccurrences(
 
   for (const [contentLineIndex, line] of contentLines.entries()) {
     const content = line.content
-    const len = delimiter.length
-
-    for (let column = 0; column < content.length; column++) {
-      if (content[column] === "\\") {
-        column++
-        continue
-      }
-
-      if (!content.startsWith(delimiter, column)) {
-        continue
-      }
-
+    for (const column of findDelimiterColumns(content, delimiter)) {
       occurrences.push({
         contentLineIndex,
         hunkLineIndex: line.hunkLineIndex,
         column,
       })
-      column += len - 1
     }
   }
 
@@ -251,6 +250,11 @@ function classifyOccurrence(
       return "close"
     }
 
+    return "unknown"
+  }
+
+  if (trimmed === token) {
+    if (hasBeforeLines || hasAfterLines) return "close"
     return "unknown"
   }
 

@@ -1,3 +1,9 @@
+# 0.1.141
+
+1. **Fixed TypeScript syntax highlighting for hunks that begin on a bare closing backtick** (`critique`, `critique --web`, `critique review`) — critique now treats a standalone backtick at the start of a hunk as the close of a template literal from earlier context and prepends a synthetic opener so the following code stays highlighted.
+
+2. **Improved backtick token handling inside quoted string fragments** (`critique`, `critique --web`, `critique review`) — backticks inside single or double quoted JavaScript/TypeScript fragments, like `${'`'}`, no longer count as template literal delimiters when deciding whether a hunk needs balancing.
+
 # 0.1.140
 
 1. **Fixed TypeScript syntax highlighting for hunks that start inside template literals or docstrings** (`critique`, `critique --web`, `critique review`) — critique now keeps the real boundary closer/opener and adds the missing paired token on an existing line instead of escaping the real token. This preserves tree-sitter state for later lines in the hunk, which fixes cases like the shared `cli/src/database.ts` patch where syntax coloring previously fell back to plain white text.
