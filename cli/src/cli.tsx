@@ -18,13 +18,12 @@ import {
 } from "@opentuah/react";
 import { useCopySelection } from "./hooks/use-copy-selection.js";
 import * as React from "react";
-import { exec, execSync } from "child_process";
+import { exec, execSync, spawnSync } from "child_process";
 import { promisify } from "util";
 import {
   createCliRenderer,
   MacOSScrollAccel,
   ScrollBoxRenderable,
-  BoxRenderable,
   addDefaultParsers,
 } from "@opentuah/core";
 import parsersConfig from "./parsers-config.js";
@@ -38,7 +37,8 @@ import { join } from "path";
 import { create } from "zustand";
 import Dropdown from "./dropdown.js";
 import { debounce } from "./utils.js";
-import { DiffView, DirectoryTreeView } from "./components/index.js";
+import { DiffView, DirectoryTreeView, DEFAULT_SIDEBAR_WIDTH } from "./components/index.js";
+import { buildDirectoryTree } from "./directory-tree.js";
 import { logger } from "./logger.js";
 import { saveStoredLicenseKey } from "./license.js";
 import {
@@ -48,6 +48,7 @@ import {
   getFileName,
   getFileStatus,
   getOldFileName,
+  getGitRepoRoot,
   countChanges,
   getViewMode,
   processFiles,
@@ -1500,18 +1501,25 @@ export interface AppProps {
   parsedFiles: ParsedFile[];
 }
 
+const SIDEBAR_GAP = 2;
+const APP_HORIZONTAL_PADDING = 2;
+
 export function App({ parsedFiles }: AppProps): React.ReactElement {
-  const { width: initialWidth } = useTerminalDimensions();
+  const { width: initialWidth, height: initialHeight } = useTerminalDimensions();
   const [width, setWidth] = React.useState(initialWidth);
+  const [terminalHeight, setTerminalHeight] = React.useState(initialHeight);
   const [scrollAcceleration] = React.useState(() => new ScrollAcceleration());
   const themeName = useAppStore((s) => s.themeName);
   const [showDropdown, setShowDropdown] = React.useState(false);
   const [showThemePicker, setShowThemePicker] = React.useState(false);
   const [previewTheme, setPreviewTheme] = React.useState<string | null>(null);
+  const [currentFileIndex, setCurrentFileIndex] = React.useState(0);
+  const [showSidebar, setShowSidebar] = React.useState(true);
+  const [focusedPane, setFocusedPane] = React.useState<"diff" | "sidebar">("sidebar");
 
-  // Refs for scroll-to-file functionality
+  // Refs for scroll functionality
   const scrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
-  const fileRefs = React.useRef<Map<number, BoxRenderable>>(new Map());
+  const sidebarScrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
 
   // Ref for double-tap detection (gg)
   const lastKeyRef = React.useRef<{ key: string; time: number } | null>(null);
@@ -1520,8 +1528,9 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
   const { onMouseUp } = useCopySelection();
 
   useOnResize(
-    React.useCallback((newWidth: number) => {
+    React.useCallback((newWidth: number, newHeight: number) => {
       setWidth(newWidth);
+      setTerminalHeight(newHeight);
     }, []),
   );
 
@@ -1552,14 +1561,98 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
       return;
     }
 
+    if (key.name === "b") {
+      setShowSidebar((prev) => !prev);
+      return;
+    }
+
+    if (key.name === "o") {
+      const file = parsedFiles[currentFileIndex];
+      if (file) {
+        const editor = process.env.EDITOR || "vi";
+        const relativePath = getFileName(file).replace(/^[ab]\//, "");
+        const absolutePath = join(getGitRepoRoot(), relativePath);
+        renderer.suspend();
+        try {
+          const match = editor.match(/(?:[^\s"]+|"[^"]*")+/g);
+          const parts = match ? match.map((s) => s.replace(/^"|"$/g, "")) : [editor];
+          const editorName = parts[0]!.toLowerCase();
+          // GUI editors don't need the TTY; launching without stdio avoids permission prompts
+          const isGuiEditor =
+            editorName === "code" ||
+            editorName === "code-insiders" ||
+            editorName === "cursor" ||
+            editorName === "zed" ||
+            editorName === "subl" ||
+            editorName === "sublime_text" ||
+            editorName === "fleet" ||
+            editorName === "goland" ||
+            editorName === "idea" ||
+            editorName === "webstorm" ||
+            editorName === "pycharm" ||
+            editorName === "rider" ||
+            editorName === "clion" ||
+            editorName === "datagrip" ||
+            editorName === "rubymine";
+          if (isGuiEditor) {
+            spawnSync(parts[0]!, parts.slice(1).concat(absolutePath));
+          } else {
+            spawnSync(parts[0]!, parts.slice(1).concat(absolutePath), { stdio: "inherit" });
+          }
+        } catch {
+          // Editor may exit non-zero (e.g. vim :cq)
+        }
+        renderer.resume();
+      }
+      return;
+    }
+
+    if (key.name === "tab") {
+      setFocusedPane((prev) => (prev === "diff" ? "sidebar" : "diff"));
+      return;
+    }
+
     if (key.name === "z" && key.ctrl) {
       renderer.console.toggle();
       return;
     }
 
-    // Vim-style scroll navigation
     const scrollbox = scrollboxRef.current;
+
+    // j/k: sidebar file navigation when sidebar focused
+    if (showSidebar && focusedPane === "sidebar" && (key.name === "j" || key.name === "k")) {
+      // Ignore key repeat events to prevent double jumps
+      if ((key as { repeated?: boolean }).repeated) return;
+
+      const direction = key.name === "j" ? 1 : -1;
+      const nextFilePos = Math.max(0, Math.min(fileNodeIndices.length - 1, activeFileNodePosition + direction));
+      const nextNodeIdx = fileNodeIndices[nextFilePos];
+      const nextFileIndex = nextNodeIdx !== undefined ? treeNodes[nextNodeIdx]?.fileIndex : undefined;
+      if (nextFileIndex !== undefined) {
+        setCurrentFileIndex(nextFileIndex);
+        // Reset scroll position when switching files
+        if (scrollbox) scrollbox.scrollTo(0);
+      }
+      key.preventDefault();
+      return;
+    }
+
+    // Vim-style scroll navigation (diff pane)
     if (scrollbox) {
+      // j - scroll down one line
+      if (key.name === "j") {
+        scrollbox.scrollBy(1, "step");
+        key.preventDefault();
+        return;
+      }
+
+      // k - scroll up one line
+      if (key.name === "k") {
+        scrollbox.scrollBy(-1, "step");
+        key.preventDefault();
+        return;
+      }
+
       // G - go to bottom
       if (key.name === "g" && key.shift) {
         scrollbox.scrollBy(1, "content");
@@ -1618,8 +1711,13 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
   const activeTheme = previewTheme ?? themeName;
   const resolvedTheme = getResolvedTheme(activeTheme);
   const bgColor = resolvedTheme.background;
+  const sidebarBgColor = rgbaToHex(resolvedTheme.backgroundPanel);
   const textColor = rgbaToHex(resolvedTheme.text);
   const mutedColor = rgbaToHex(resolvedTheme.textMuted);
+  const availableContentWidth = Math.max(20, width - APP_HORIZONTAL_PADDING);
+  const diffPaneWidth = showSidebar
+    ? Math.max(20, availableContentWidth - DEFAULT_SIDEBAR_WIDTH - SIDEBAR_GAP)
+    : availableContentWidth;
 
   const dropdownOptions = parsedFiles.map((file, idx) => {
     const name = getFileName(file);
@@ -1642,25 +1740,54 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
     };
   });
 
-  // Scroll to file by index
-  const scrollToFile = (index: number) => {
-    const scrollbox = scrollboxRef.current;
-    const fileRef = fileRefs.current.get(index);
-    if (scrollbox && fileRef) {
-      const contentY = scrollbox.content?.y ?? 0;
-      const targetY = fileRef.y - contentY;
-      scrollbox.scrollTo(Math.max(0, targetY));
-    }
-  };
+  // Build tree nodes for sidebar auto-reveal calculations
+  const treeNodes = React.useMemo(() => buildDirectoryTree(treeFiles), [treeFiles]);
+  const activeNodeIndex = React.useMemo(() => {
+    return treeNodes.findIndex((node) => node.isFile && node.fileIndex === currentFileIndex);
+  }, [treeNodes, currentFileIndex]);
+
+  // File node indices for sidebar keyboard navigation (j/k)
+  const fileNodeIndices = React.useMemo(() => {
+    return treeNodes
+      .map((node, idx) => ({ node, idx }))
+      .filter(({ node }) => node.isFile && node.fileIndex !== undefined)
+      .map(({ idx }) => idx);
+  }, [treeNodes]);
+
+  const activeFileNodePosition = React.useMemo(() => {
+    return fileNodeIndices.findIndex((nodeIdx) => nodeIdx === activeNodeIndex);
+  }, [fileNodeIndices, activeNodeIndex]);
+
+  // Debounced sidebar auto-reveal: scroll sidebar to keep Current File visible
+  React.useEffect(() => {
+    if (activeNodeIndex < 0) return;
+
+    const timeout = setTimeout(() => {
+      const sidebarScrollbox = sidebarScrollboxRef.current;
+      if (!sidebarScrollbox) return;
+
+      const contentY = sidebarScrollbox.content?.y ?? 0;
+      const viewportTop = -contentY;
+      const viewportHeight = Math.max(3, terminalHeight - 3);
+      const rowY = activeNodeIndex;
+
+      if (rowY < viewportTop) {
+        sidebarScrollbox.scrollTo(rowY);
+      } else if (rowY >= viewportTop + viewportHeight) {
+        sidebarScrollbox.scrollTo(Math.max(0, rowY - viewportHeight + 1));
+      }
+    }, 150);
+
+    return () => clearTimeout(timeout);
+  }, [activeNodeIndex, terminalHeight]);
 
   const handleFileSelect = (value: string) => {
     const index = parseInt(value, 10);
-    scrollToFile(index);
+    setCurrentFileIndex(index);
     setShowDropdown(false);
-  };
-
-  const handleTreeFileSelect = (fileIndex: number) => {
-    scrollToFile(fileIndex);
+    // Reset scroll when switching files via picker
+    const scrollbox = scrollboxRef.current;
+    if (scrollbox) scrollbox.scrollTo(0);
   };
 
   const themeOptions = themeNames.map((name) => ({
@@ -1678,67 +1805,49 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
     setPreviewTheme(value);
   };
 
-  // Render all files content (used in both theme picker preview and main view)
-  const renderAllFiles = () => (
-    <box style={{ flexDirection: "column" }}>
-      {/* Directory tree at the top */}
-      <box style={{ marginBottom: 2 }}>
-        <DirectoryTreeView
-          files={treeFiles}
-          onFileSelect={handleTreeFileSelect}
+  const renderCurrentFile = () => {
+    const file = parsedFiles[currentFileIndex];
+    if (!file) return null;
+
+    const fileName = getFileName(file);
+    const oldFileName = getOldFileName(file);
+    const filetype = detectFiletype(fileName);
+    const { additions, deletions } = countChanges(file.hunks);
+    const viewMode = getViewMode(additions, deletions, diffPaneWidth);
+
+    return (
+      <box style={{ flexDirection: "column" }}>
+        <box
+          style={{
+            paddingBottom: 1,
+            paddingLeft: 1,
+            paddingRight: 1,
+            flexShrink: 0,
+            flexDirection: "row",
+            alignItems: "center",
+          }}
+        >
+          {oldFileName ? (
+            <>
+              <text fg={mutedColor}>{oldFileName.trim()}</text>
+              <text fg={mutedColor}> → </text>
+              <text fg={textColor}>{fileName.trim()}</text>
+            </>
+          ) : (
+            <text fg={textColor}>{fileName.trim()}</text>
+          )}
+          <text fg="#2d8a47"> +{additions}</text>
+          <text fg="#c53b53">-{deletions}</text>
+        </box>
+        <DiffView
+          diff={file.rawDiff || ""}
+          view={viewMode}
+          filetype={filetype}
           themeName={activeTheme}
         />
       </box>
-
-      {parsedFiles.map((file, idx) => {
-        const fileName = getFileName(file);
-        const oldFileName = getOldFileName(file);
-        const filetype = detectFiletype(fileName);
-        const { additions, deletions } = countChanges(file.hunks);
-        const viewMode = getViewMode(additions, deletions, width);
-
-        return (
-          <box
-            key={idx}
-            ref={(r: BoxRenderable | null) => {
-              if (r) fileRefs.current.set(idx, r);
-            }}
-            style={{ flexDirection: "column", marginBottom: 2 }}
-          >
-            {/* File header */}
-            <box
-              style={{
-                paddingBottom: 1,
-                paddingLeft: 1,
-                paddingRight: 1,
-                flexShrink: 0,
-                flexDirection: "row",
-                alignItems: "center",
-              }}
-            >
-              {oldFileName ? (
-                <>
-                  <text fg={mutedColor}>{oldFileName.trim()}</text>
-                  <text fg={mutedColor}> → </text>
-                  <text fg={textColor}>{fileName.trim()}</text>
-                </>
-              ) : (
-                <text fg={textColor}>{fileName.trim()}</text>
-              )}
-              <text fg="#2d8a47"> +{additions}</text>
-              <text fg="#c53b53">-{deletions}</text>
-            </box>
-            <DiffView
-              diff={file.rawDiff || ""}
-              view={viewMode}
-              filetype={filetype}
-              themeName={activeTheme}
-            />
-          </box>
-        );
-      })}
-    </box>
-  );
+    );
+  };
 
   // Always render the same structure - scrollbox is never remounted
   return (
@@ -1786,33 +1895,90 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
         </box>
       )}
 
-      {/* Scrollbox - always mounted, preserves scroll position */}
-      <scrollbox
-        ref={scrollboxRef}
-        scrollY
-        scrollAcceleration={scrollAcceleration}
+      <box
         style={{
+          flexDirection: "row",
           flexGrow: 1,
           flexShrink: 1,
-          rootOptions: {
-            backgroundColor: bgColor,
-            border: false,
-          },
-          contentOptions: {
-            minHeight: 0,
-          },
-          scrollbarOptions: {
-            showArrows: false,
-            trackOptions: {
-              foregroundColor: mutedColor,
-              backgroundColor: bgColor,
-            },
-          },
         }}
-        focused={!showDropdown && !showThemePicker}
       >
-        {renderAllFiles()}
-      </scrollbox>
+        {showSidebar && (
+          <box
+            style={{
+              width: DEFAULT_SIDEBAR_WIDTH,
+              flexShrink: 0,
+              marginRight: SIDEBAR_GAP,
+              backgroundColor: sidebarBgColor,
+              flexDirection: "column",
+            }}
+          >
+            <scrollbox
+              ref={sidebarScrollboxRef}
+              scrollY
+              style={{
+                flexGrow: 1,
+                flexShrink: 1,
+                rootOptions: {
+                  backgroundColor: sidebarBgColor,
+                  border: false,
+                },
+                contentOptions: {
+                  minHeight: 0,
+                },
+                scrollbarOptions: {
+                  showArrows: false,
+                  trackOptions: {
+                    foregroundColor: mutedColor,
+                    backgroundColor: sidebarBgColor,
+                  },
+                },
+              }}
+            >
+              <DirectoryTreeView
+                files={treeFiles}
+                themeName={activeTheme}
+                width={DEFAULT_SIDEBAR_WIDTH}
+                activeFileIndex={currentFileIndex}
+              />
+            </scrollbox>
+          </box>
+        )}
+
+        {/* Scrollbox - always mounted, preserves scroll position */}
+        <box
+          style={{
+            flexGrow: 1,
+            flexShrink: 1,
+          }}
+        >
+          <scrollbox
+            ref={scrollboxRef}
+            scrollY
+            scrollAcceleration={scrollAcceleration}
+            style={{
+              flexGrow: 1,
+              flexShrink: 1,
+              rootOptions: {
+                backgroundColor: bgColor,
+                border: false,
+              },
+              contentOptions: {
+                minHeight: 0,
+              },
+              scrollbarOptions: {
+                showArrows: false,
+                trackOptions: {
+                  foregroundColor: mutedColor,
+                  backgroundColor: bgColor,
+                },
+              },
+            }}
+            focused={!showDropdown && !showThemePicker}
+          >
+            {renderCurrentFile()}
+          </scrollbox>
+        </box>
+      </box>
 
       {/* Footer - hidden when dropdown is open */}
       {!showDropdown && !showThemePicker && (
@@ -1829,7 +1995,13 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
           <text fg={textColor}>p</text>
           <text fg={mutedColor}> files ({parsedFiles.length})  </text>
           <text fg={textColor}>t</text>
-          <text fg={mutedColor}> theme</text>
+          <text fg={mutedColor}> theme  </text>
+          <text fg={textColor}>b</text>
+          <text fg={mutedColor}> sidebar  </text>
+          <text fg={textColor}>o</text>
+          <text fg={mutedColor}> edit  </text>
+          <text fg={textColor}>tab</text>
+          <text fg={mutedColor}> focus</text>
           <box flexGrow={1} />
           <text fg={mutedColor}>run with </text>
           <text fg={textColor}><b>--web</b></text>

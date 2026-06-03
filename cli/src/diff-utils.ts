@@ -21,6 +21,17 @@ export function ensureGitRepo(): void {
 }
 
 /**
+ * Get the absolute path to the git repository root.
+ */
+export function getGitRepoRoot(): string {
+  try {
+    return execSync("git rev-parse --show-toplevel", { encoding: "utf-8", stdio: "pipe" }).trim()
+  } catch {
+    return process.cwd()
+  }
+}
+
+/**
  * Strip submodule status lines from git diff output.
  * git diff --submodule=diff adds various status lines that the diff parser doesn't understand:
  * - "Submodule name hash1..hash2:" (header before submodule diff)
