@@ -41,6 +41,26 @@ export interface TreeNode {
   prefix: string
 }
 
+/**
+ * A hierarchical tree node with children for sidebar collapse/expand
+ */
+export interface HierarchicalTreeNode {
+  /** Display path (may be collapsed, e.g., "src/components") */
+  displayPath: string
+  /** Whether this is a file (true) or directory (false) */
+  isFile: boolean
+  /** File index for scroll-to (only for files) */
+  fileIndex?: number
+  /** File status (only for files) */
+  status?: FileStatus
+  /** Number of added lines (only for files) */
+  additions?: number
+  /** Number of deleted lines (only for files) */
+  deletions?: number
+  /** Child nodes */
+  children: HierarchicalTreeNode[]
+}
+
 interface InternalTreeNode {
   path: string
   title?: string
@@ -49,6 +69,38 @@ interface InternalTreeNode {
   additions?: number
   deletions?: number
   children: InternalTreeNode[]
+}
+
+/**
+ * Build a hierarchical tree from file paths
+ * @param files Array of file info objects
+ * @returns Array of HierarchicalTreeNode objects with children
+ */
+export function buildHierarchicalTree(files: TreeFileInfo[]): HierarchicalTreeNode[] {
+  if (files.length === 0) {
+    return []
+  }
+
+  const tree = buildInternalTree(files)
+  sortInternalTree(tree)
+  return toHierarchical(tree)
+}
+
+function toHierarchical(nodes: InternalTreeNode[]): HierarchicalTreeNode[] {
+  return nodes.map((node) => {
+    const collapsed = collapseNode(node)
+    const isFile = collapsed.originalNode.status !== undefined
+
+    return {
+      displayPath: collapsed.path,
+      isFile,
+      fileIndex: collapsed.originalNode.fileIndex,
+      status: collapsed.originalNode.status,
+      additions: collapsed.originalNode.additions,
+      deletions: collapsed.originalNode.deletions,
+      children: toHierarchical(collapsed.children),
+    }
+  })
 }
 
 /**

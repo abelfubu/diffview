@@ -4,10 +4,20 @@
 // Supports fixed-width sidebar rendering with filename-preserving truncation.
 
 import * as React from "react"
-import { buildDirectoryTree, type TreeFileInfo, type TreeNode } from "../directory-tree.js"
+import { buildHierarchicalTree, type HierarchicalTreeNode, type TreeFileInfo, type TreeNode } from "../directory-tree.js"
 import { getResolvedTheme, rgbaToHex } from "../themes.js"
+import { FOLDER_ICON_CLOSED, FOLDER_ICON_OPEN, getFileIcon } from "../tree-icons.js"
+
+const ICON_WIDTH = 3 // 2-char nerd font icon + 1 space
 
 export const DEFAULT_SIDEBAR_WIDTH = 60
+
+export interface DirectoryTreeViewRef {
+  focusNext(): void
+  focusPrev(): void
+  toggleCollapse(): void
+  getActiveRowIndex(): number
+}
 
 export interface DirectoryTreeViewProps {
   /** Files to display in the tree */
@@ -20,6 +30,8 @@ export interface DirectoryTreeViewProps {
   width?: number
   /** Index of the currently active file (for highlight) */
   activeFileIndex?: number
+  /** Paths of folders that should start collapsed */
+  initialCollapsedPaths?: string[]
 }
 
 /**
@@ -92,6 +104,8 @@ interface TreeNodeLineProps {
   onSelect?: () => void
   width: number
   isActive?: boolean
+  isFocused?: boolean
+  isCollapsed?: boolean
 }
 
 /**
@@ -105,9 +119,17 @@ const TreeNodeLine: React.FC<TreeNodeLineProps> = ({
   onSelect,
   width,
   isActive,
+  isFocused,
+  isCollapsed,
 }) => {
   const [isHovered, setIsHovered] = React.useState(false)
   const treePrefix = `${node.prefix}${node.connector}`
+  const icon = node.isFile
+    ? getFileIcon(node.displayPath)
+    : isCollapsed
+      ? FOLDER_ICON_CLOSED
+      : FOLDER_ICON_OPEN
+  const iconFg = isFocused ? rgbaToHex(theme.primary) : mutedColor
 
   if (node.isFile) {
     // File node - colorize based on status
@@ -115,12 +137,13 @@ const TreeNodeLine: React.FC<TreeNodeLineProps> = ({
     const addColor = rgbaToHex(theme.diffAdded) // green
     const delColor = rgbaToHex(theme.diffRemoved) // red
     const stats = getStatsParts(node)
-    const availablePathWidth = Math.max(1, width - treePrefix.length - stats.text.length)
+    const availablePathWidth = Math.max(1, width - ICON_WIDTH - treePrefix.length - stats.text.length)
     const truncatedPath = truncateKeepingEnd(node.displayPath, availablePathWidth)
 
     const activeBg = isActive ? rgbaToHex(theme.primary.brighten(0.3)) : undefined
+    const focusBg = isFocused ? rgbaToHex(theme.primary.brighten(0.15)) : undefined
     const hoverBg = isHovered ? rgbaToHex(theme.backgroundPanel) : undefined
-    const bgColor = activeBg ?? hoverBg
+    const bgColor = activeBg ?? focusBg ?? hoverBg
 
     return (
       <box
@@ -134,6 +157,7 @@ const TreeNodeLine: React.FC<TreeNodeLineProps> = ({
         // onMouseDown={onSelect} // disabled: conflicts with copy selection
       >
         <text fg={mutedColor}>{treePrefix}</text>
+        <text fg={iconFg}>{icon} </text>
         <text fg={pathColor}>{truncatedPath}</text>
         <text fg={mutedColor}> (</text>
         {stats.hasAdditions && <text fg={addColor}>+{node.additions}</text>}
@@ -144,14 +168,16 @@ const TreeNodeLine: React.FC<TreeNodeLineProps> = ({
     )
   }
 
-  const availablePathWidth = Math.max(1, width - treePrefix.length)
+  const availablePathWidth = Math.max(1, width - ICON_WIDTH - treePrefix.length)
   const truncatedPath = truncateKeepingEnd(node.displayPath, availablePathWidth)
 
   // Directory node - use muted color for everything
   const dirActiveBg = isActive ? rgbaToHex(theme.primary.brighten(0.3)) : undefined
+  const dirFocusBg = isFocused ? rgbaToHex(theme.primary.brighten(0.15)) : undefined
   return (
-    <box style={{ flexDirection: "row", width, backgroundColor: dirActiveBg }}>
+    <box style={{ flexDirection: "row", width, backgroundColor: dirActiveBg ?? dirFocusBg }}>
       <text fg={mutedColor}>{treePrefix}</text>
+      <text fg={iconFg}>{icon} </text>
       <text fg={textColor}>{truncatedPath}</text>
     </box>
   )
@@ -161,45 +187,189 @@ const TreeNodeLine: React.FC<TreeNodeLineProps> = ({
  * DirectoryTreeView component
  * Renders a directory tree with file status colors and fixed-width truncation for sidebar layout.
  */
-export function DirectoryTreeView({
-  files,
-  onFileSelect,
-  themeName,
-  width = DEFAULT_SIDEBAR_WIDTH,
-  activeFileIndex,
-}: DirectoryTreeViewProps): React.ReactElement | null {
-  const nodes = React.useMemo(() => buildDirectoryTree(files), [files])
-  const resolvedTheme = getResolvedTheme(themeName)
-  const mutedColor = rgbaToHex(resolvedTheme.textMuted)
-  const textColor = rgbaToHex(resolvedTheme.text)
+function flattenVisible(
+  nodes: HierarchicalTreeNode[],
+  collapsedPaths: Set<string>,
+  prefix: string = "",
+): TreeNode[] {
+  const result: TreeNode[] = []
 
-  if (nodes.length === 0) {
-    return null
-  }
+  nodes.forEach((node) => {
+    result.push({
+      displayPath: node.displayPath,
+      isFile: node.isFile,
+      fileIndex: node.fileIndex,
+      status: node.status,
+      additions: node.additions,
+      deletions: node.deletions,
+      prefix,
+      connector: "  ",
+    })
 
-  return (
-    <box
-      style={{
-        flexDirection: "column",
-        width,
-      }}
-    >
-      {nodes.map((node, idx) => (
-        <TreeNodeLine
-          key={idx}
-          node={node}
-          theme={resolvedTheme}
-          mutedColor={mutedColor}
-          textColor={textColor}
-          width={width}
-          isActive={node.isFile && node.fileIndex === activeFileIndex}
-          onSelect={
-            node.isFile && node.fileIndex !== undefined && onFileSelect
-              ? () => onFileSelect(node.fileIndex!)
-              : undefined
-          }
-        />
-      ))}
-    </box>
-  )
+    if (!node.isFile && !collapsedPaths.has(node.displayPath)) {
+      result.push(...flattenVisible(node.children, collapsedPaths, prefix + "  "))
+    }
+  })
+
+  return result
 }
+
+export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, DirectoryTreeViewProps>(
+  function DirectoryTreeView(
+    {
+      files,
+      onFileSelect,
+      themeName,
+      width = DEFAULT_SIDEBAR_WIDTH,
+      activeFileIndex,
+      initialCollapsedPaths = [],
+    },
+    ref,
+  ): React.ReactElement | null {
+    const [collapsedPaths, setCollapsedPaths] = React.useState<Set<string>>(
+      () => new Set(initialCollapsedPaths),
+    )
+    const [focusedRowIndex, setFocusedRowIndex] = React.useState(0)
+
+    const onFileSelectRef = React.useRef(onFileSelect)
+    onFileSelectRef.current = onFileSelect
+
+    const hierarchicalNodes = React.useMemo(() => buildHierarchicalTree(files), [files])
+    const visibleNodes = React.useMemo(
+      () => flattenVisible(hierarchicalNodes, collapsedPaths),
+      [hierarchicalNodes, collapsedPaths],
+    )
+
+    React.useEffect(() => {
+      setFocusedRowIndex((prev) => Math.min(prev, Math.max(0, visibleNodes.length - 1)))
+    }, [visibleNodes.length])
+
+    const activeFileFolders = React.useMemo(() => {
+      const result = new Set<string>()
+      if (activeFileIndex === undefined) return result
+
+      function walk(nodes: HierarchicalTreeNode[]): boolean {
+        for (const node of nodes) {
+          if (node.isFile && node.fileIndex === activeFileIndex) {
+            return true
+          }
+          if (!node.isFile) {
+            const hasActiveFile = walk(node.children)
+            if (hasActiveFile) {
+              result.add(node.displayPath)
+            }
+          }
+        }
+        return false
+      }
+
+      walk(hierarchicalNodes)
+      return result
+    }, [hierarchicalNodes, activeFileIndex])
+
+    React.useEffect(() => {
+      if (activeFileIndex === undefined) return
+      const idx = visibleNodes.findIndex((n) => n.isFile && n.fileIndex === activeFileIndex)
+      if (idx >= 0) {
+        setFocusedRowIndex(idx)
+        return
+      }
+      // Active file is hidden in a collapsed folder — focus the containing folder
+      for (let i = 0; i < visibleNodes.length; i++) {
+        const node = visibleNodes[i]
+        if (!node.isFile && collapsedPaths.has(node.displayPath) && activeFileFolders.has(node.displayPath)) {
+          setFocusedRowIndex(i)
+          return
+        }
+      }
+    }, [activeFileIndex, visibleNodes, activeFileFolders, collapsedPaths])
+
+    React.useImperativeHandle(ref, () => ({
+      focusNext() {
+        setFocusedRowIndex((prev) => {
+          const next = Math.min(visibleNodes.length - 1, prev + 1)
+          const node = visibleNodes[next]
+          if (node?.isFile && node.fileIndex !== undefined) {
+            onFileSelectRef.current?.(node.fileIndex)
+          }
+          return next
+        })
+      },
+      focusPrev() {
+        setFocusedRowIndex((prev) => {
+          const next = Math.max(0, prev - 1)
+          const node = visibleNodes[next]
+          if (node?.isFile && node.fileIndex !== undefined) {
+            onFileSelectRef.current?.(node.fileIndex)
+          }
+          return next
+        })
+      },
+      toggleCollapse() {
+        setFocusedRowIndex((prev) => {
+          const node = visibleNodes[prev]
+          if (!node || node.isFile) return prev
+
+          const path = node.displayPath
+          setCollapsedPaths((current) => {
+            const next = new Set(current)
+            if (next.has(path)) next.delete(path)
+            else next.add(path)
+            return next
+          })
+          return prev
+        })
+      },
+      getActiveRowIndex() {
+        const idx = visibleNodes.findIndex((n) => n.isFile && n.fileIndex === activeFileIndex)
+        if (idx >= 0) return idx
+        for (let i = 0; i < visibleNodes.length; i++) {
+          const node = visibleNodes[i]
+          if (!node.isFile && collapsedPaths.has(node.displayPath) && activeFileFolders.has(node.displayPath)) {
+            return i
+          }
+        }
+        return 0
+      },
+    }), [visibleNodes, activeFileFolders, activeFileIndex, collapsedPaths])
+
+    const resolvedTheme = getResolvedTheme(themeName)
+    const mutedColor = rgbaToHex(resolvedTheme.textMuted)
+    const textColor = rgbaToHex(resolvedTheme.text)
+
+    if (visibleNodes.length === 0) {
+      return null
+    }
+
+    return (
+      <box
+        style={{
+          flexDirection: "column",
+          width,
+        }}
+      >
+        {visibleNodes.map((node, idx) => (
+          <TreeNodeLine
+            key={idx}
+            node={node}
+            theme={resolvedTheme}
+            mutedColor={mutedColor}
+            textColor={textColor}
+            width={width}
+            isActive={
+              (node.isFile && node.fileIndex === activeFileIndex) ||
+              (!node.isFile && collapsedPaths.has(node.displayPath) && activeFileFolders.has(node.displayPath))
+            }
+            isFocused={idx === focusedRowIndex}
+            isCollapsed={!node.isFile && collapsedPaths.has(node.displayPath)}
+            onSelect={
+              node.isFile && node.fileIndex !== undefined && onFileSelect
+                ? () => onFileSelect(node.fileIndex!)
+                : undefined
+            }
+          />
+        ))}
+      </box>
+    )
+  },
+)

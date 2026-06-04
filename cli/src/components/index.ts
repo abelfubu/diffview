@@ -3,6 +3,6 @@
 
 export { DiffView, type DiffViewProps } from "./diff-view.js"
 export {
-	DEFAULT_SIDEBAR_WIDTH, DirectoryTreeView, type DirectoryTreeViewProps
+	DEFAULT_SIDEBAR_WIDTH, DirectoryTreeView, type DirectoryTreeViewProps, type DirectoryTreeViewRef,
 } from "./directory-tree-view.js"
 

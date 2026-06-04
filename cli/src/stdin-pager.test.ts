@@ -38,6 +38,36 @@ function launchCritique(diffPath: string, opts?: { cols?: number; rows?: number 
   })
 }
 
+// Auto-detect piped stdin (no --stdin flag).
+// Spawns critique with a real pipe (not a PTY) so process.stdin.isTTY is undefined.
+async function runCritiqueAutoStdin(diffContent: string): Promise<string> {
+  const proc = Bun.spawn({
+    cmd: ["bun", "run", "src/cli.tsx"],
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      TERM: "xterm-256color",
+    },
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+
+  const writer = proc.stdin
+  writer.write(diffContent)
+  writer.end()
+
+  const output = new TextDecoder().decode(await Bun.readableStreamToArrayBuffer(proc.stdout))
+  const stderr = new TextDecoder().decode(await Bun.readableStreamToArrayBuffer(proc.stderr))
+  const code = await proc.exited
+
+  if (code !== 0) {
+    throw new Error(`critique exited with ${code}: ${stderr}`)
+  }
+
+  return output
+}
+
 // -- Sample diffs --
 
 const SINGLE_FILE_DIFF = [
@@ -194,11 +224,11 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-                                            └── b/src
-                                                └── hello.ts (+1,-1)
+        󰉋 src
+          󰛦 hello.ts (+1,-1)
 
 
-       a/src/hello.ts → b/src/hello.ts +1-1
+       src/hello.ts +1-1
 
        1   const greeting = 'hello'
        2 - console.log(greeting)
@@ -239,11 +269,10 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-                                              └── b
-                                                  └── readme.md ()
+        󰍔 readme.md ()
 
 
-       a/readme.md → b/readme.md +0-0
+       readme.md +0-0
 
        1 # My Project
        2
@@ -261,12 +290,12 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-                                             └── b/src
-                                                 ├── index.ts (+2)
-                                                 └── logger.ts (+5)
+        󰉋 src
+          󰛦 index.ts (+2)
+          󰛦 logger.ts (+5)
 
 
-       a/src/index.ts → b/src/index.ts +2-0
+       src/index.ts +2-0
 
        1   import { App } from './app'
        2 + import { Logger } from './logger'
@@ -276,7 +305,7 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
        6   app.start()
 
 
-       b/src/logger.ts +5-0
+       src/logger.ts +5-0
 
        1 + export class Logger {
        2 +   log(msg: string) {
@@ -305,11 +334,11 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-                                           └── a/src
-                                               └── deprecated.ts (-4)
+        󰉋 src
+          󰛦 deprecated.ts (-4)
 
 
-       a/src/deprecated.ts +0-4
+       src/deprecated.ts +0-4
 
        1 - // This module is no longer needed
        2 - export function oldHelper() {
@@ -330,11 +359,11 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-                                              └── b/src
-                                                  └── utils.ts (+7)
+        󰉋 src
+          󰛦 utils.ts (+7)
 
 
-       b/src/utils.ts +7-0
+       src/utils.ts +7-0
 
        1 + export function clamp(value: number, min: number, max: number): number {
        2 +   return Math.min(Math.max(value, min), max)
@@ -359,11 +388,10 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-                                           └── b
-                                               └── config.json (+6,-4)
+        󰘦 config.json (+6,-4)
 
 
-       a/config.json → b/config.json +6-4
+       config.json +6-4
 
         1   {
         2 -   "name": "my-app",
@@ -396,8 +424,8 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-                                           └── src
-                                               └── new-name.ts (+1,-1)
+        󰉋 src
+          󰛦 new-name.ts (+1,-1)
 
 
        src/old-name.ts → src/new-name.ts +1-1
@@ -425,7 +453,7 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-                                                 └── unknown ()
+        󰈙 unknown ()
 
 
        unknown +0-0"
@@ -448,11 +476,11 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-                                            └── b/src
-                                                └── hello.ts (+1,-1)
+        󰉋 src
+          󰛦 hello.ts (+1,-1)
 
 
-       a/src/hello.ts → b/src/hello.ts +1-1
+       src/hello.ts +1-1
 
        1   const greeting = 'hello'
        2 - console.log(greeting)
@@ -471,11 +499,11 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-              └── b/src
-                  └── hello.ts (+1,-1)
+        󰉋 src
+          󰛦 hello.ts (+1,-1)
 
 
-       a/src/hello.ts → b/src/hello.ts +1-1
+       src/hello.ts +1-1
 
        1   const greeting = 'hello'
        2 - console.log(greeting)
@@ -492,5 +520,47 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
       expect(line.length).toBeLessThanOrEqual(40)
     }
     session.close()
+  }, 30000)
+})
+
+describe("auto-detect piped stdin (git diff | critique)", () => {
+  test("single file change without --stdin flag", async () => {
+    const output = await runCritiqueAutoStdin(SINGLE_FILE_DIFF)
+    const trimmed = output.replace(/\r/g, "").trim()
+
+    expect(trimmed).toContain("hello.ts")
+    expect(trimmed).toContain("console.log(greeting)")
+    expect(trimmed).toContain("console.log(greeting + ' world')")
+    expect(trimmed).not.toContain("unknown")
+  }, 30000)
+
+  test("empty diff falls back to git repo check (errors outside repo)", async () => {
+    // Empty piped stdin with no --stdin should fall back to git diff.
+    // Since we're running this inside the critique repo which may have no
+    // uncommitted changes, the output should be "No changes to display".
+    const output = await runCritiqueAutoStdin("")
+    const trimmed = output.replace(/\r/g, "").trim()
+
+    expect(trimmed).toContain("No changes to display")
+  }, 30000)
+
+  test("multiple files in one diff without --stdin", async () => {
+    const output = await runCritiqueAutoStdin(MULTI_FILE_DIFF)
+    const trimmed = output.replace(/\r/g, "").trim()
+
+    expect(trimmed).toContain("index.ts")
+    expect(trimmed).toContain("logger.ts")
+    expect(trimmed).toContain("Logger")
+    expect(trimmed).not.toContain("unknown")
+  }, 30000)
+
+  test("colored diff auto-detected and stripped", async () => {
+    const output = await runCritiqueAutoStdin(COLORED_DIFF)
+    const trimmed = output.replace(/\r/g, "").trim()
+
+    expect(trimmed).toContain("hello.ts")
+    expect(trimmed).not.toContain("unknown")
+    // ANSI codes should be stripped
+    expect(trimmed).not.toContain("\x1B[")
   }, 30000)
 })

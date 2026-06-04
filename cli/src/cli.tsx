@@ -37,8 +37,8 @@ import { join } from "path";
 import { create } from "zustand";
 import Dropdown from "./dropdown.js";
 import { debounce } from "./utils.js";
-import { DiffView, DirectoryTreeView, DEFAULT_SIDEBAR_WIDTH } from "./components/index.js";
-import { buildDirectoryTree } from "./directory-tree.js";
+import { DiffView, DirectoryTreeView, DEFAULT_SIDEBAR_WIDTH, type DirectoryTreeViewRef } from "./components/index.js";
+// buildDirectoryTree no longer needed — DirectoryTreeView manages its own tree
 import { logger } from "./logger.js";
 import { saveStoredLicenseKey } from "./license.js";
 import {
@@ -1520,6 +1520,7 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
   // Refs for scroll functionality
   const scrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
   const sidebarScrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
+  const sidebarRef = React.useRef<DirectoryTreeViewRef | null>(null);
 
   // Ref for double-tap detection (gg)
   const lastKeyRef = React.useRef<{ key: string; time: number } | null>(null);
@@ -1619,22 +1620,28 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
 
     const scrollbox = scrollboxRef.current;
 
-    // j/k: sidebar file navigation when sidebar focused
-    if (showSidebar && focusedPane === "sidebar" && (key.name === "j" || key.name === "k")) {
-      // Ignore key repeat events to prevent double jumps
-      if ((key as { repeated?: boolean }).repeated) return;
+    // Sidebar navigation when sidebar focused
+    if (showSidebar && focusedPane === "sidebar") {
+      // j/k: navigate rows
+      if (key.name === "j" || key.name === "k") {
+        // Ignore key repeat events to prevent double jumps
+        if ((key as { repeated?: boolean }).repeated) return;
 
-      const direction = key.name === "j" ? 1 : -1;
-      const nextFilePos = Math.max(0, Math.min(fileNodeIndices.length - 1, activeFileNodePosition + direction));
-      const nextNodeIdx = fileNodeIndices[nextFilePos];
-      const nextFileIndex = nextNodeIdx !== undefined ? treeNodes[nextNodeIdx]?.fileIndex : undefined;
-      if (nextFileIndex !== undefined) {
-        setCurrentFileIndex(nextFileIndex);
-        // Reset scroll position when switching files
-        if (scrollbox) scrollbox.scrollTo(0);
+        if (key.name === "j") {
+          sidebarRef.current?.focusNext();
+        } else {
+          sidebarRef.current?.focusPrev();
+        }
+        key.preventDefault();
+        return;
       }
-      key.preventDefault();
-      return;
+
+      // l/h/Enter/Space: toggle folder collapse
+      if (key.name === "l" || key.name === "h" || key.name === "return" || key.name === "space") {
+        sidebarRef.current?.toggleCollapse();
+        key.preventDefault();
+        return;
+      }
     }
 
     // Vim-style scroll navigation (diff pane)
@@ -1740,36 +1747,16 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
     };
   });
 
-  // Build tree nodes for sidebar auto-reveal calculations
-  const treeNodes = React.useMemo(() => buildDirectoryTree(treeFiles), [treeFiles]);
-  const activeNodeIndex = React.useMemo(() => {
-    return treeNodes.findIndex((node) => node.isFile && node.fileIndex === currentFileIndex);
-  }, [treeNodes, currentFileIndex]);
-
-  // File node indices for sidebar keyboard navigation (j/k)
-  const fileNodeIndices = React.useMemo(() => {
-    return treeNodes
-      .map((node, idx) => ({ node, idx }))
-      .filter(({ node }) => node.isFile && node.fileIndex !== undefined)
-      .map(({ idx }) => idx);
-  }, [treeNodes]);
-
-  const activeFileNodePosition = React.useMemo(() => {
-    return fileNodeIndices.findIndex((nodeIdx) => nodeIdx === activeNodeIndex);
-  }, [fileNodeIndices, activeNodeIndex]);
-
   // Debounced sidebar auto-reveal: scroll sidebar to keep Current File visible
   React.useEffect(() => {
-    if (activeNodeIndex < 0) return;
-
     const timeout = setTimeout(() => {
       const sidebarScrollbox = sidebarScrollboxRef.current;
       if (!sidebarScrollbox) return;
 
+      const rowY = sidebarRef.current?.getActiveRowIndex() ?? 0;
       const contentY = sidebarScrollbox.content?.y ?? 0;
       const viewportTop = -contentY;
       const viewportHeight = Math.max(3, terminalHeight - 3);
-      const rowY = activeNodeIndex;
 
       if (rowY < viewportTop) {
         sidebarScrollbox.scrollTo(rowY);
@@ -1779,7 +1766,7 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
     }, 150);
 
     return () => clearTimeout(timeout);
-  }, [activeNodeIndex, terminalHeight]);
+  }, [currentFileIndex, terminalHeight]);
 
   const handleFileSelect = (value: string) => {
     const index = parseInt(value, 10);
@@ -1935,10 +1922,15 @@ export function App({ parsedFiles }: AppProps): React.ReactElement {
               }}
             >
               <DirectoryTreeView
+                ref={sidebarRef}
                 files={treeFiles}
                 themeName={activeTheme}
                 width={DEFAULT_SIDEBAR_WIDTH}
                 activeFileIndex={currentFileIndex}
+                onFileSelect={(fileIndex) => {
+                  setCurrentFileIndex(fileIndex);
+                  scrollboxRef.current?.scrollTo(0);
+                }}
               />
             </scrollbox>
           </box>
@@ -2227,10 +2219,16 @@ cli
   .option("--cols <cols>", "Desktop columns for web/image render (default: 240)")
   .option("--mobile-cols <cols>", "Mobile columns for web render (default: 100)")
   .option("--stdin", "Read diff from stdin (for use as a pager)")
+  .option("--no-stdin", "Ignore piped stdin, always read diff from git")
   .option("--scrollback", "Output to terminal scrollback instead of TUI (auto-enabled when non-TTY)")
   .action(async (base, head, options) => {
+    // Auto-detect piped stdin (e.g. `git diff | critique`)
+    // Explicit --stdin is for PTY pager integration (lazygit) where stdin IS a TTY
+    // --no-stdin forces git diff mode even when stdin is a pipe
+    const mightHaveStdin = (options.stdin || !process.stdin.isTTY) && !options.noStdin;
+
     // Ensure we're inside a git repository before doing anything
-    if (!options.stdin) {
+    if (!mightHaveStdin) {
       ensureGitRepo();
     }
 
@@ -2250,14 +2248,12 @@ cli
       positionalFilters: options['--'],
     });
 
-    // Detect default mode (no args): submodule diffs are handled separately
-    const isDefaultMode = !options.staged && !options.commit && !base && !head && !options.stdin;
-
     // Get diff content - from stdin or git
-    let diffContent: string;
+    let diffContent = "";
+    let isStdinMode = false;
 
-    if (options.stdin) {
-      // Handle stdin mode (for lazygit pager integration)
+    if (mightHaveStdin) {
+      // Handle stdin mode (for lazygit pager integration or piped input)
       // Lazygit uses --color=always by default, so strip ANSI escape codes
       // before parsing the diff (parsePatch expects plain text)
       diffContent = "";
@@ -2265,48 +2261,55 @@ cli
         diffContent += chunk;
       }
       diffContent = stripAnsi(diffContent);
-    } else {
-      // Get diff from git (runs once for all modes)
+      isStdinMode = true;
+    }
+
+    if (!isStdinMode) {
+      // Stdin was not requested — read diff from git
+      ensureGitRepo();
       const { stdout: gitDiff } = await execAsync(gitCommand, {
         encoding: "utf-8",
       });
       diffContent = gitDiff;
+    }
 
-      // In default mode, append diffs from dirty submodules only.
-      // The main git diff uses --ignore-submodules=all, so we separately
-      // fetch diffs for submodules that have uncommitted changes.
-      // This avoids showing submodule ref changes where the submodule
-      // itself has already committed everything.
-      if (isDefaultMode) {
-        const dirtySubmodules = getDirtySubmodulePaths();
-        if (dirtySubmodules.length > 0) {
-          const subCmd = buildSubmoduleDiffCommand(dirtySubmodules, {
-            context: options.context,
-          });
-          try {
-            const { stdout: subDiff } = await execAsync(subCmd, {
-              encoding: "utf-8",
-            });
-            if (subDiff.trim()) {
-              diffContent = diffContent + "\n" + subDiff;
-            }
-          } catch {
-            // Submodule diff failed (e.g. submodule not initialized) — skip
-          }
-        }
+    // Detect default mode (no args): submodule diffs are handled separately
+    const isDefaultMode = !options.staged && !options.commit && !base && !head && !isStdinMode;
 
-        diffContent = await filterCombinedDiffByPatterns(diffContent, {
-          filter: options.filter,
-          positionalFilters: options['--'],
+    // In default mode, append diffs from dirty submodules only.
+    // The main git diff uses --ignore-submodules=all, so we separately
+    // fetch diffs for submodules that have uncommitted changes.
+    // This avoids showing submodule ref changes where the submodule
+    // itself has already committed everything.
+    if (isDefaultMode) {
+      const dirtySubmodules = getDirtySubmodulePaths();
+      if (dirtySubmodules.length > 0) {
+        const subCmd = buildSubmoduleDiffCommand(dirtySubmodules, {
+          context: options.context,
         });
+        try {
+          const { stdout: subDiff } = await execAsync(subCmd, {
+            encoding: "utf-8",
+          });
+          if (subDiff.trim()) {
+            diffContent = diffContent + "\n" + subDiff;
+          }
+        } catch {
+          // Submodule diff failed (e.g. submodule not initialized) — skip
+        }
       }
+
+      diffContent = await filterCombinedDiffByPatterns(diffContent, {
+        filter: options.filter,
+        positionalFilters: options['--'],
+      });
     }
 
     // Clean submodule headers once
     const cleanedDiff = stripSubmoduleHeaders(diffContent);
 
     // Check for empty diff (except for --watch mode which may get content later)
-    const shouldWatch = options.watch && !base && !head && !options.commit && !options.stdin;
+    const shouldWatch = options.watch && !base && !head && !options.commit && !isStdinMode;
     if (!cleanedDiff.trim() && !shouldWatch) {
       // Use stderr for --json mode
       const log = options.json ? console.error.bind(console) : console.log.bind(console);
@@ -2351,6 +2354,8 @@ cli
       return;
     }
 
+    // Explicit --stdin forces scrollback (pager mode). Auto-detected piped stdin
+    // only forces scrollback when stdout is also non-TTY.
     if (options.scrollback || options.stdin || !process.stdout.isTTY) {
       // For scrollback, prefer terminal width over --cols default (240 is for web)
       const scrollbackCols = process.stdout.columns || parseInt(options.cols) || 120;
@@ -2363,10 +2368,32 @@ cli
 
     // TUI mode
     try {
+      // When diff came from a piped stdin, process.stdin is consumed and cannot
+      // be used for keyboard input. Open /dev/tty (the controlling terminal) for
+      // keyboard events instead.
+      let rendererStdin: NodeJS.ReadStream | undefined;
+      if (isStdinMode && !options.stdin) {
+        try {
+          const fs = await import("fs");
+          const tty = await import("tty");
+          const fd = fs.openSync("/dev/tty", "r");
+          rendererStdin = new tty.ReadStream(fd) as NodeJS.ReadStream;
+        } catch {
+          // /dev/tty not available — fall back to scrollback
+          const scrollbackCols = process.stdout.columns || parseInt(options.cols) || 120;
+          await runScrollbackMode(cleanedDiff, {
+            theme: options.theme,
+            cols: scrollbackCols,
+          });
+          return;
+        }
+      }
+
       // Parallelize diff module loading with renderer creation
       const [diffModule, renderer] = await Promise.all([
         import("diff"),
         createCliRenderer({
+          stdin: rendererStdin,
           onDestroy() {
             process.exit(0);
           },

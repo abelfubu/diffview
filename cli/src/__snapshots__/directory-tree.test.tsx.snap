@@ -89,10 +89,10 @@ exports[`TreeRenderer visual tests should handle sibling directories at differen
 `;
 
 exports[`DirectoryTreeView component should render tree without border 1`] = `
-"  README.md (-15)                                           
-  src                                                       
-    index.ts (+5,-2)                                        
-    utils.ts (+30)                                          
+"  󰍔 README.md (-15)                                         
+  󰉋 src                                                     
+    󰛦 index.ts (+5,-2)                                      
+    󰛦 utils.ts (+30)                                        
                                                             
                                                             
                                                             

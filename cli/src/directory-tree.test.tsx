@@ -4,7 +4,7 @@
 import { testRender } from "@opentuah/react/test-utils"
 import { afterEach, describe, expect, it } from "bun:test"
 import { DirectoryTreeView } from "./components/directory-tree-view.js"
-import { buildDirectoryTree, type TreeFileInfo, type TreeNode } from "./directory-tree.js"
+import { buildDirectoryTree, buildHierarchicalTree, type TreeFileInfo, type TreeNode } from "./directory-tree.js"
 
 /**
  * Simple component to render tree nodes as text for testing
@@ -229,6 +229,65 @@ describe("TreeRenderer visual tests", () => {
 	})
 })
 
+describe("buildHierarchicalTree", () => {
+	it("should return empty array for no files", () => {
+		const result = buildHierarchicalTree([])
+		expect(result).toEqual([])
+	})
+
+	it("should handle single file at root", () => {
+		const files: TreeFileInfo[] = [
+			{ path: "README.md", status: "modified", additions: 5, deletions: 2 },
+		]
+		const result = buildHierarchicalTree(files)
+		expect(result).toHaveLength(1)
+		expect(result[0]!.displayPath).toBe("README.md")
+		expect(result[0]!.isFile).toBe(true)
+		expect(result[0]!.status).toBe("modified")
+		expect(result[0]!.children).toEqual([])
+	})
+
+	it("should build nested directory hierarchy", () => {
+		const files: TreeFileInfo[] = [
+			{ path: "src/index.ts", status: "modified", additions: 5, deletions: 2 },
+			{ path: "src/utils.ts", status: "added", additions: 30, deletions: 0 },
+		]
+		const result = buildHierarchicalTree(files)
+		expect(result).toHaveLength(1)
+		expect(result[0]!.displayPath).toBe("src")
+		expect(result[0]!.isFile).toBe(false)
+		expect(result[0]!.children).toHaveLength(2)
+		expect(result[0]!.children[0]!.displayPath).toBe("index.ts")
+		expect(result[0]!.children[0]!.isFile).toBe(true)
+		expect(result[0]!.children[1]!.displayPath).toBe("utils.ts")
+		expect(result[0]!.children[1]!.isFile).toBe(true)
+	})
+
+	it("should collapse single-child directories in hierarchy", () => {
+		const files: TreeFileInfo[] = [
+			{ path: "src/components/Button.tsx", status: "added", additions: 50, deletions: 0 },
+		]
+		const result = buildHierarchicalTree(files)
+		expect(result).toHaveLength(1)
+		expect(result[0]!.displayPath).toBe("src/components")
+		expect(result[0]!.isFile).toBe(false)
+		expect(result[0]!.children).toHaveLength(1)
+		expect(result[0]!.children[0]!.displayPath).toBe("Button.tsx")
+		expect(result[0]!.children[0]!.isFile).toBe(true)
+	})
+
+	it("should sort nodes alphabetically at every level", () => {
+		const files: TreeFileInfo[] = [
+			{ path: "b/file.ts", status: "modified", additions: 1, deletions: 0 },
+			{ path: "a/file.ts", status: "modified", additions: 1, deletions: 0 },
+		]
+		const result = buildHierarchicalTree(files)
+		expect(result).toHaveLength(2)
+		expect(result[0]!.displayPath).toBe("a")
+		expect(result[1]!.displayPath).toBe("b")
+	})
+})
+
 describe("DirectoryTreeView component", () => {
 	let testSetup: Awaited<ReturnType<typeof testRender>>
 
@@ -236,6 +295,56 @@ describe("DirectoryTreeView component", () => {
 		if (testSetup) {
 			testSetup.renderer.destroy()
 		}
+	})
+
+	it("renders folder icon on directory rows", async () => {
+		const files: TreeFileInfo[] = [
+			{ path: "src/index.ts", status: "modified", additions: 5, deletions: 2, fileIndex: 0 },
+		]
+
+		testSetup = await testRender(
+			<DirectoryTreeView files={files} themeName="github" />,
+			{ width: 60, height: 5 },
+		)
+		globalThis.IS_REACT_ACT_ENVIRONMENT = false
+
+		await testSetup.renderOnce()
+		const frame = testSetup.captureCharFrame()
+		expect(frame).toContain("󰉋")
+	})
+
+	it("renders file-type icon on file rows", async () => {
+		const files: TreeFileInfo[] = [
+			{ path: "README.md", status: "modified", additions: 5, deletions: 2, fileIndex: 0 },
+			{ path: "src/index.ts", status: "added", additions: 30, deletions: 0, fileIndex: 1 },
+		]
+
+		testSetup = await testRender(
+			<DirectoryTreeView files={files} themeName="github" />,
+			{ width: 60, height: 5 },
+		)
+		globalThis.IS_REACT_ACT_ENVIRONMENT = false
+
+		await testSetup.renderOnce()
+		const frame = testSetup.captureCharFrame()
+		expect(frame).toContain("󰍔")
+		expect(frame).toContain("󰛦")
+	})
+
+	it("renders generic file icon for unknown extensions", async () => {
+		const files: TreeFileInfo[] = [
+			{ path: "config.yaml", status: "modified", additions: 1, deletions: 0, fileIndex: 0 },
+		]
+
+		testSetup = await testRender(
+			<DirectoryTreeView files={files} themeName="github" />,
+			{ width: 60, height: 3 },
+		)
+		globalThis.IS_REACT_ACT_ENVIRONMENT = false
+
+		await testSetup.renderOnce()
+		const frame = testSetup.captureCharFrame()
+		expect(frame).toContain("󰈙")
 	})
 
 	it("should render tree without border", async () => {
@@ -311,5 +420,78 @@ describe("DirectoryTreeView component", () => {
 		expect(frame).toContain("README.md")
 		expect(frame).toContain("index.ts")
 		expect(frame).toContain("utils.ts")
+	})
+
+	it("filters out children of collapsed folders", async () => {
+		const files: TreeFileInfo[] = [
+			{ path: "src/index.ts", status: "modified", additions: 5, deletions: 2, fileIndex: 0 },
+			{ path: "src/utils.ts", status: "added", additions: 30, deletions: 0, fileIndex: 1 },
+		]
+
+		testSetup = await testRender(
+			<DirectoryTreeView files={files} themeName="github" initialCollapsedPaths={["src"]} />,
+			{ width: 60, height: 5 },
+		)
+		globalThis.IS_REACT_ACT_ENVIRONMENT = false
+
+		await testSetup.renderOnce()
+		const frame = testSetup.captureCharFrame()
+		expect(frame).toContain("src")
+		expect(frame).not.toContain("index.ts")
+		expect(frame).not.toContain("utils.ts")
+	})
+
+	it("shows closed folder icon for collapsed folders", async () => {
+		const files: TreeFileInfo[] = [
+			{ path: "src/index.ts", status: "modified", additions: 5, deletions: 2, fileIndex: 0 },
+		]
+
+		testSetup = await testRender(
+			<DirectoryTreeView files={files} themeName="github" initialCollapsedPaths={["src"]} />,
+			{ width: 60, height: 3 },
+		)
+		globalThis.IS_REACT_ACT_ENVIRONMENT = false
+
+		await testSetup.renderOnce()
+		const frame = testSetup.captureCharFrame()
+		expect(frame).toContain("󰝰")
+		expect(frame).not.toContain("󰉋")
+	})
+
+	it("collapsing compressed tree path hides entire chain", async () => {
+		const files: TreeFileInfo[] = [
+			{ path: "src/components/Button.tsx", status: "added", additions: 50, deletions: 0, fileIndex: 0 },
+			{ path: "src/components/Input.tsx", status: "modified", additions: 10, deletions: 5, fileIndex: 1 },
+		]
+
+		testSetup = await testRender(
+			<DirectoryTreeView files={files} themeName="github" initialCollapsedPaths={["src/components"]} />,
+			{ width: 60, height: 5 },
+		)
+		globalThis.IS_REACT_ACT_ENVIRONMENT = false
+
+		await testSetup.renderOnce()
+		const frame = testSetup.captureCharFrame()
+		expect(frame).toContain("src/components")
+		expect(frame).not.toContain("Button.tsx")
+		expect(frame).not.toContain("Input.tsx")
+	})
+
+	it("renders with active file inside collapsed folder", async () => {
+		const files: TreeFileInfo[] = [
+			{ path: "src/index.ts", status: "modified", additions: 5, deletions: 2, fileIndex: 0 },
+		]
+
+		testSetup = await testRender(
+			<DirectoryTreeView files={files} themeName="github" initialCollapsedPaths={["src"]} activeFileIndex={0} />,
+			{ width: 60, height: 3 },
+		)
+		globalThis.IS_REACT_ACT_ENVIRONMENT = false
+
+		await testSetup.renderOnce()
+		const frame = testSetup.captureCharFrame()
+		// Folder is visible, file is hidden
+		expect(frame).toContain("src")
+		expect(frame).not.toContain("index.ts")
 	})
 })

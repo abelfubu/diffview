@@ -420,6 +420,20 @@ export function buildSubmoduleDiffCommand(
 }
 
 /**
+ * Strip git diff prefixes (a/ and b/) from file paths.
+ * External diffs (e.g. gh pr diff) include these prefixes, but internal git
+ * commands use --no-prefix. Normalizing ensures consistent display.
+ */
+function stripDiffPrefix(path: string | undefined): string | undefined {
+  if (!path) return path;
+  if (path === "/dev/null") return path;
+  if (path.startsWith("a/") || path.startsWith("b/")) {
+    return path.slice(2);
+  }
+  return path;
+}
+
+/**
  * Get file status from parsed diff file
  * - added: oldFileName is /dev/null (new file)
  * - deleted: newFileName is /dev/null (removed file)
@@ -433,8 +447,8 @@ export function getFileStatus(file: {
   renameFrom?: string;
   renameTo?: string;
 }): "added" | "modified" | "deleted" | "renamed" {
-  const oldName = file.oldFileName;
-  const newName = file.newFileName;
+  const oldName = stripDiffPrefix(file.oldFileName);
+  const newName = stripDiffPrefix(file.newFileName);
 
   if (!oldName || oldName === "/dev/null") return "added";
   if (!newName || newName === "/dev/null") return "deleted";
@@ -457,8 +471,8 @@ export function getFileName(file: {
   // For renames, prefer the renameTo metadata (always clean, no prefix)
   if (file.renameTo) return file.renameTo;
 
-  const newName = file.newFileName;
-  const oldName = file.oldFileName;
+  const newName = stripDiffPrefix(file.newFileName);
+  const oldName = stripDiffPrefix(file.oldFileName);
 
   // Filter out /dev/null which appears for new/deleted files
   if (newName && newName !== "/dev/null") return newName;
@@ -478,8 +492,8 @@ export function getOldFileName(file: {
   renameTo?: string;
 }): string | undefined {
   if (file.renameFrom && file.renameTo) return file.renameFrom;
-  const oldName = file.oldFileName;
-  const newName = file.newFileName;
+  const oldName = stripDiffPrefix(file.oldFileName);
+  const newName = stripDiffPrefix(file.newFileName);
   if (oldName && newName && oldName !== newName && oldName !== "/dev/null" && newName !== "/dev/null") {
     return oldName;
   }

@@ -219,9 +219,9 @@ describe("ReviewAppView", () => {
     expect(frame).toContain("src/utils.ts")
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                    
-                                            └── src                                                       
-                                                ├── index.ts (+1)                                         
-                                                └── utils.ts (+5,-1)                                      
+         󰉋 src                                                                                            
+           󰛦 index.ts (+1)                                                                                
+           󰛦 utils.ts (+5,-1)                                                                             
                                                                                                           
                                                                                                           
          Import changes                                                                                   
@@ -351,9 +351,9 @@ describe("ReviewAppView", () => {
     const frame = testSetup.captureCharFrame()
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                                                            
-                                                                └── src                                                                           
-                                                                    ├── index.ts (+1)                                                             
-                                                                    └── utils.ts (+5,-1)                                                          
+         󰉋 src                                                                                                                                    
+           󰛦 index.ts (+1)                                                                                                                        
+           󰛦 utils.ts (+5,-1)                                                                                                                     
                                                                                                                                                   
                                                                                                                                                   
          Import changes                                                                                                                           
@@ -424,13 +424,13 @@ describe("ReviewAppView", () => {
     const frame = testSetup.captureCharFrame()
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                                                            
-                                                            └── src                                                                             █ 
-                                                                ├── api                                                                         █ 
-                                                                │   └── users.ts (+5,-2)                                                        █ 
-                                                                ├── config                                                                      █ 
-                                                                │   └── database.ts (+3,-2)                                                     █ 
-                                                                └── errors                                                                      █ 
-                                                                    └── index.ts (+6)                                                           █ 
+         󰉋 src                                                                                                                                  █ 
+           󰉋 api                                                                                                                                █ 
+             󰛦 users.ts (+5,-2)                                                                                                                 █ 
+           󰉋 config                                                                                                                             █ 
+             󰛦 database.ts (+3,-2)                                                                                                              █ 
+           󰉋 errors                                                                                                                             █ 
+             󰛦 index.ts (+6)                                                                                                                    █ 
                                                                                                                                                 █ 
                                                                                                                                                 █ 
          Custom Error Classes                                                                                                                   █ 
@@ -526,8 +526,8 @@ Added validation at handler start.`,
     // Should only show lines 1-7 of the hunk, not the full thing
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                    
-                                          └── src/api                                                   █ 
-                                              └── handlers.ts (+9,-2)                                   █ 
+         󰉋 src/api                                                                                      █ 
+           󰛦 handlers.ts (+9,-2)                                                                        █ 
                                                                                                         █ 
                                                                                                         █ 
          Input Validation                                                                               █ 
@@ -575,8 +575,8 @@ Added validation at handler start.`,
     // Should show two sections: validation (lines 1-7) then processing (lines 8-16)
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                                        
-                                                    └── src/api                                                               
-                                                        └── handlers.ts (+9,-2)                                               
+         󰉋 src/api                                                                                                            
+           󰛦 handlers.ts (+9,-2)                                                                                              
                                                                                                                               
                                                                                                                               
          Input Validation                                                                                                     
@@ -649,11 +649,11 @@ Added validation at handler start.`,
     // Should show: full hunk #3, then partial of largeHunk (lines 1-7)
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                    
-                                        └── src                                                         █ 
-                                            ├── api                                                     █ 
-                                            │   └── handlers.ts (+9,-2)                                 █ 
-                                            ├── index.ts (+1)                                           █ 
-                                            └── utils.ts (+5,-1)                                        █ 
+         󰉋 src                                                                                          █ 
+           󰉋 api                                                                                        █ 
+             󰛦 handlers.ts (+9,-2)                                                                      █ 
+           󰛦 index.ts (+1)                                                                              █ 
+           󰛦 utils.ts (+5,-1)                                                                           █ 
                                                                                                           
                                                                                                           
          Import changes                                                                                   
@@ -716,9 +716,9 @@ This uses hunkId instead of hunkIds but shows full hunk.`,
     // Should show full hunk #1
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                    
-                                            └── src                                                       
-                                                ├── index.ts (+1)                                         
-                                                └── utils.ts (+5,-1)                                      
+         󰉋 src                                                                                            
+           󰛦 index.ts (+1)                                                                                
+           󰛦 utils.ts (+5,-1)                                                                             
                                                                                                           
                                                                                                           
          Full hunk via hunkId                                                                             
@@ -798,8 +798,8 @@ The prose above stays narrow.`,
     const frame = testSetup.captureCharFrame()
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                                        
-                                                       └── src                                                              █ 
-                                                           └── config.ts (+3)                                               █ 
+         󰉋 src                                                                                                              █ 
+           󰛦 config.ts (+3)                                                                                                 █ 
                                                                                                                             █ 
                                                                                                                             █ 
          Configuration with Wide Content                                                                                      
@@ -921,8 +921,8 @@ The diagram above should not wrap.`,
     await testSetup.renderOnce()
     expect(testSetup.captureCharFrame()).toMatchInlineSnapshot(`
       "                                                                      
-                              └── src                                       
-                                  └── config.ts (+1)                        
+         󰉋 src                                                              
+           󰛦 config.ts (+1)                                                 
                                                                             
                                                                             
          Architecture                                                       
@@ -1001,8 +1001,8 @@ The diagram above should not wrap.`,
     await testSetup.renderOnce()
     expect(testSetup.captureCharFrame()).toMatchInlineSnapshot(`
       "                                                                      
-                              └── src                                       
-                                  └── config.ts (+1)                        
+         󰉋 src                                                              
+           󰛦 config.ts (+1)                                                 
                                                                             
                                                                             
          Architecture                                                       
@@ -1214,8 +1214,8 @@ Long configuration lines that should wrap properly.`,
     const frame = testSetup.captureCharFrame()
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                    
-                                            └── src                                                       
-                                                └── config.ts (+3,-2)                                     
+         󰉋 src                                                                                            
+           󰛦 config.ts (+3,-2)                                                                            
                                                                                                           
                                                                                                           
          Configuration Changes                                                                            
@@ -1285,8 +1285,8 @@ Added environment-based URL and auth header.`,
     const frame = testSetup.captureCharFrame()
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                    
-                                             └── src                                                    █ 
-                                                 └── api.ts (+1,-1)                                     █ 
+         󰉋 src                                                                                          █ 
+           󰛦 api.ts (+1,-1)                                                                             █ 
                                                                                                         █ 
                                                                                                         █ 
          API Endpoint Update                                                                            █ 
@@ -1335,9 +1335,9 @@ Added logger import.`,
     const frame = testSetup.captureCharFrame()
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                
-                                  └── src                                           █ 
-                                      ├── index.ts (+1)                             █ 
-                                      └── utils.ts (+5,-1)                          █ 
+         󰉋 src                                                                      █ 
+           󰛦 index.ts (+1)                                                          █ 
+           󰛦 utils.ts (+5,-1)                                                       █ 
                                                                                     █ 
                                                                                     █ 
          Import changes                                                             █ 
@@ -1444,8 +1444,8 @@ AFTER: Closures preserve context
     // - Both diagrams merge into one big code block
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                                    
-                                             └── src                                                      
-                                                 └── config.ts (+1)                                       
+         󰉋 src                                                                                            
+           󰛦 config.ts (+1)                                                                               
                                                                                                           
                                                                                                           
          ActionPanel captures actions to zustand, ActionsDialog renders them                              
@@ -1569,8 +1569,8 @@ This prose should stay at normal width, not expand.`,
 
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                
-                                   └── src                                            
-                                       └── config.ts (+1)                             
+         󰉋 src                                                                        
+           󰛦 config.ts (+1)                                                           
                                                                                       
                                                                                       
          Architecture                                                                 
@@ -1649,8 +1649,8 @@ AFTER: Closures preserve
     // - Each diagram should be a separate code block
     expect(frame).toMatchInlineSnapshot(`
       "                                                                                
-                                   └── src                                            
-                                       └── config.ts (+1)                             
+         󰉋 src                                                                        
+           󰛦 config.ts (+1)                                                           
                                                                                       
                                                                                       
          ActionPanel captures actions to zustand                                      

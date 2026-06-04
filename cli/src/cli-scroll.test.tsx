@@ -287,4 +287,56 @@ describe("App scrollbox", () => {
     const frame = testSetup.captureCharFrame()
     expect(frame).toContain("README.md")
   })
+
+  it("toggles folder collapse with l/h when sidebar is focused", async () => {
+    const parsedFiles = [
+      createParsedFile("src/file-01.ts", 0),
+      createParsedFile("src/file-02.ts", 1),
+    ]
+
+    testSetup = await testRender(<App parsedFiles={parsedFiles} />, {
+      width: 120,
+      height: 12,
+    })
+
+    await act(async () => {
+      await testSetup.renderOnce()
+    })
+
+    const initialFrame = testSetup.captureCharFrame()
+    expect(initialFrame).toContain("src")
+    expect(initialFrame).toContain("file-01.ts")
+    expect(initialFrame).toContain("file-02.ts")
+
+    // Focus is on file-01.ts (row 1). Press k to move to src folder (row 0).
+    testSetup.mockInput.pressKey("k")
+    await new Promise((r) => setTimeout(r, 50))
+    await act(async () => {
+      await testSetup.renderOnce()
+    })
+
+    // Press l to collapse the folder
+    testSetup.mockInput.pressKey("l")
+    await new Promise((r) => setTimeout(r, 50))
+    await act(async () => {
+      await testSetup.renderOnce()
+    })
+
+    const afterCollapse = testSetup.captureCharFrame()
+    // Sidebar shows closed folder icon, no TypeScript file icons
+    expect(afterCollapse).toContain("󰝰")
+    expect(afterCollapse).not.toContain("󰛦")
+
+    // Press h to expand the folder
+    testSetup.mockInput.pressKey("h")
+    await new Promise((r) => setTimeout(r, 50))
+    await act(async () => {
+      await testSetup.renderOnce()
+    })
+
+    const afterExpand = testSetup.captureCharFrame()
+    // Sidebar shows open folder icon and TypeScript file icons again
+    expect(afterExpand).toContain("󰉋")
+    expect(afterExpand).toContain("󰛦")
+  })
 })

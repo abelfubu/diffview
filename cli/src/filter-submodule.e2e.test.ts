@@ -91,7 +91,7 @@ function createFixtureRepo(testName: string): string {
 }
 
 function runCritiqueWithFilters(repoPath: string, filters: string[]): string {
-  const args = [CLI_PATH, "--scrollback"]
+  const args = [CLI_PATH, "--scrollback", "--no-stdin"]
   for (const filter of filters) {
     args.push("--filter", filter)
   }
