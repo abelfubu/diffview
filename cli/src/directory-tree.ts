@@ -35,9 +35,9 @@ export interface TreeNode {
   additions?: number
   /** Number of deleted lines (only for files) */
   deletions?: number
-  /** Tree connector character: "├── " or "└── " */
+  /** Tree connector: spaces for indentation (no ASCII art) */
   connector: string
-  /** Prefix string for tree lines, e.g., "│   " */
+  /** Prefix string for tree indentation, e.g., "    " */
   prefix: string
 }
 
@@ -177,7 +177,7 @@ function flattenTree(tree: InternalTreeNode[]): TreeNode[] {
   ): void {
     const collapsed = collapseNode(node)
     const displayPath = collapsed.path
-    const connector = isLast ? "\u2514\u2500\u2500 " : "\u251c\u2500\u2500 "
+    const connector = "  "
 
     // Determine if this is a file (has status) or directory
     const isFile = collapsed.originalNode.status !== undefined
@@ -195,7 +195,7 @@ function flattenTree(tree: InternalTreeNode[]): TreeNode[] {
 
     // Process children
     if (collapsed.children.length > 0) {
-      const childPrefix = prefix + (isLast ? "    " : "\u2502   ")
+      const childPrefix = prefix + "  "
 
       collapsed.children.forEach((child, idx) => {
         const childIsLast = idx === collapsed.children.length - 1
