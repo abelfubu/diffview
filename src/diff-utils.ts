@@ -420,14 +420,21 @@ export function buildSubmoduleDiffCommand(
 }
 
 /**
- * Strip git diff prefixes (a/ and b/) from file paths.
+ * Common git diff prefixes that appear in external diffs (git diff, gh pr diff, etc.)
+ * - a/, b/: standard git diff prefixes
+ * - w/: worktree prefix (git diff develop | dv)
+ */
+const COMMON_DIFF_PREFIXES = ["a/", "b/", "w/"];
+
+/**
+ * Strip git diff prefixes from file paths.
  * External diffs (e.g. gh pr diff) include these prefixes, but internal git
  * commands use --no-prefix. Normalizing ensures consistent display.
  */
 function stripDiffPrefix(path: string | undefined): string | undefined {
   if (!path) return path;
   if (path === "/dev/null") return path;
-  if (path.startsWith("a/") || path.startsWith("b/")) {
+  if (COMMON_DIFF_PREFIXES.some((prefix) => path.startsWith(prefix))) {
     return path.slice(2);
   }
   return path;
