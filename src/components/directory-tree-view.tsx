@@ -24,12 +24,16 @@ export interface DirectoryTreeViewProps {
   files: TreeFileInfo[]
   /** Callback when a file is clicked (receives fileIndex) */
   onFileSelect?: (fileIndex: number) => void
+  /** Callback when a folder is focused (receives folder displayPath) */
+  onFolderSelect?: (folderPath: string) => void
   /** Theme name for colors */
   themeName: string
   /** Fixed render width for sidebar layout */
   width?: number
   /** Index of the currently active file (for highlight) */
   activeFileIndex?: number
+  /** Path of the currently active folder (for highlight) */
+  activeFolderPath?: string
   /** Paths of folders that should start collapsed */
   initialCollapsedPaths?: string[]
 }
@@ -197,6 +201,7 @@ function flattenVisible(
   nodes.forEach((node) => {
     result.push({
       displayPath: node.displayPath,
+      fullPath: node.fullPath,
       isFile: node.isFile,
       fileIndex: node.fileIndex,
       status: node.status,
@@ -219,9 +224,11 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
     {
       files,
       onFileSelect,
+      onFolderSelect,
       themeName,
       width = DEFAULT_SIDEBAR_WIDTH,
       activeFileIndex,
+      activeFolderPath,
       initialCollapsedPaths = [],
     },
     ref,
@@ -233,6 +240,8 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
 
     const onFileSelectRef = React.useRef(onFileSelect)
     onFileSelectRef.current = onFileSelect
+    const onFolderSelectRef = React.useRef(onFolderSelect)
+    onFolderSelectRef.current = onFolderSelect
 
     const hierarchicalNodes = React.useMemo(() => buildHierarchicalTree(files), [files])
     const visibleNodes = React.useMemo(
@@ -268,6 +277,13 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
     }, [hierarchicalNodes, activeFileIndex])
 
     React.useEffect(() => {
+      if (activeFolderPath) {
+        const idx = visibleNodes.findIndex((n) => !n.isFile && n.fullPath === activeFolderPath)
+        if (idx >= 0) {
+          setFocusedRowIndex(idx)
+          return
+        }
+      }
       if (activeFileIndex === undefined) return
       const idx = visibleNodes.findIndex((n) => n.isFile && n.fileIndex === activeFileIndex)
       if (idx >= 0) {
@@ -282,7 +298,7 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
           return
         }
       }
-    }, [activeFileIndex, visibleNodes, activeFileFolders, collapsedPaths])
+    }, [activeFileIndex, activeFolderPath, visibleNodes, activeFileFolders, collapsedPaths])
 
     React.useImperativeHandle(ref, () => ({
       focusNext() {
@@ -291,6 +307,8 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
           const node = visibleNodes[next]
           if (node?.isFile && node.fileIndex !== undefined) {
             onFileSelectRef.current?.(node.fileIndex)
+          } else if (node && !node.isFile) {
+            onFolderSelectRef.current?.(node.fullPath)
           }
           return next
         })
@@ -301,6 +319,8 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
           const node = visibleNodes[next]
           if (node?.isFile && node.fileIndex !== undefined) {
             onFileSelectRef.current?.(node.fileIndex)
+          } else if (node && !node.isFile) {
+            onFolderSelectRef.current?.(node.fullPath)
           }
           return next
         })
@@ -321,6 +341,10 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
         })
       },
       getActiveRowIndex() {
+        if (activeFolderPath) {
+          const idx = visibleNodes.findIndex((n) => !n.isFile && n.fullPath === activeFolderPath)
+          if (idx >= 0) return idx
+        }
         const idx = visibleNodes.findIndex((n) => n.isFile && n.fileIndex === activeFileIndex)
         if (idx >= 0) return idx
         for (let i = 0; i < visibleNodes.length; i++) {
@@ -331,7 +355,7 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
         }
         return 0
       },
-    }), [visibleNodes, activeFileFolders, activeFileIndex, collapsedPaths])
+    }), [visibleNodes, activeFileFolders, activeFileIndex, activeFolderPath, collapsedPaths])
 
     const resolvedTheme = getResolvedTheme(themeName)
     const mutedColor = rgbaToHex(resolvedTheme.textMuted)
@@ -358,14 +382,19 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
             width={width}
             isActive={
               (node.isFile && node.fileIndex === activeFileIndex) ||
-              (!node.isFile && collapsedPaths.has(node.displayPath) && activeFileFolders.has(node.displayPath))
+              (!node.isFile && (
+                node.fullPath === activeFolderPath ||
+                (collapsedPaths.has(node.displayPath) && activeFileFolders.has(node.displayPath))
+              ))
             }
             isFocused={idx === focusedRowIndex}
             isCollapsed={!node.isFile && collapsedPaths.has(node.displayPath)}
             onSelect={
               node.isFile && node.fileIndex !== undefined && onFileSelect
                 ? () => onFileSelect(node.fileIndex!)
-                : undefined
+                : !node.isFile && onFolderSelect
+                  ? () => onFolderSelect(node.fullPath)
+                  : undefined
             }
           />
         ))}

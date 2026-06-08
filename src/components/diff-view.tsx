@@ -14,6 +14,8 @@ export interface DiffViewProps {
   themeName: string
   /** Wrap mode for long lines (default: "word") */
   wrapMode?: "word" | "char" | "none"
+  /** Enable italics in syntax highlighting (default: true) */
+  italicsEnabled?: boolean
 }
 
 function getLuminance(color: RGBA): number {
@@ -70,7 +72,7 @@ function getWordHighlightBg(base: RGBA): string {
   return rgbaToHex(candidate)
 }
 
-export function DiffView({ diff, view, filetype, themeName, wrapMode = "word" }: DiffViewProps): React.ReactNode {
+export function DiffView({ diff, view, filetype, themeName, wrapMode = "word", italicsEnabled = true }: DiffViewProps): React.ReactNode {
   // Balance paired delimiters (backticks, triple quotes, etc.) before
   // passing to <diff> so tree-sitter doesn't misparse hunks that start
   // inside a multi-line string
@@ -85,8 +87,8 @@ export function DiffView({ diff, view, filetype, themeName, wrapMode = "word" }:
     [themeName],
   )
   const syntaxStyle = React.useMemo(
-    () => SyntaxStyle.fromStyles(getSyntaxTheme(themeName)),
-    [themeName],
+    () => SyntaxStyle.fromStyles(getSyntaxTheme(themeName, "dark", italicsEnabled)),
+    [themeName, italicsEnabled],
   )
 
   // Convert RGBA to hex for diff component props

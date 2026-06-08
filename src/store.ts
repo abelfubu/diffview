@@ -1,5 +1,5 @@
 // Global Zustand store for persistent application state.
-// Manages theme selection with automatic persistence to ~/.critique/state.json.
+// Manages theme selection and italics toggle with automatic persistence to ~/.config/dv/state.json.
 // Shared between main diff view and review view components.
 
 import { create } from "zustand"
@@ -9,11 +9,12 @@ import { homedir } from "os"
 import { defaultThemeName } from "./themes.js"
 
 // State persistence
-const STATE_DIR = join(homedir(), ".critique")
+const STATE_DIR = join(homedir(), ".config", "dv")
 const STATE_FILE = join(STATE_DIR, "state.json")
 
 export interface PersistedState {
   themeName?: string
+  italicsEnabled?: boolean
 }
 
 export function loadPersistedState(): PersistedState {
@@ -42,15 +43,17 @@ const persistedState = loadPersistedState()
 export interface AppState {
   // Shared
   themeName: string
+  italicsEnabled: boolean
 }
 
 export const useAppStore = create<AppState>(() => ({
   themeName: persistedState.themeName ?? defaultThemeName,
+  italicsEnabled: persistedState.italicsEnabled ?? true,
 }))
 
-// Subscribe to persist theme changes
+// Subscribe to persist state changes
 useAppStore.subscribe((state) => {
-  savePersistedState({ themeName: state.themeName })
+  savePersistedState({ themeName: state.themeName, italicsEnabled: state.italicsEnabled })
 })
 
 // Re-export persisted state for initial reads

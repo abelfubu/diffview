@@ -107,6 +107,7 @@ const THEME_FILES: Record<string, string> = {
   material: "material.json",
   matrix: "matrix.json",
   mercury: "mercury.json",
+  "muted-slate": "muted-slate.json",
   monokai: "monokai.json",
   nightowl: "nightowl.json",
   nord: "nord.json",
@@ -255,28 +256,35 @@ export function getResolvedTheme(
 export function getSyntaxTheme(
   name: string,
   mode: "dark" | "light" = "dark",
+  italicsEnabled: boolean = true,
 ): SyntaxTheme {
   const resolved = getResolvedTheme(name, mode);
+
+  const style = (s: SyntaxThemeStyle): SyntaxThemeStyle => {
+    if (italicsEnabled) return s;
+    const { italic, ...rest } = s;
+    return rest;
+  };
 
   return {
     // Default text style
     default: { fg: resolved.text },
 
     // Code syntax styles
-    keyword: { fg: resolved.syntaxKeyword, italic: true },
+    keyword: style({ fg: resolved.syntaxKeyword, italic: true }),
     "keyword.import": { fg: resolved.syntaxKeyword },
-    "keyword.return": { fg: resolved.syntaxKeyword, italic: true },
-    "keyword.conditional": { fg: resolved.syntaxKeyword, italic: true },
-    "keyword.repeat": { fg: resolved.syntaxKeyword, italic: true },
-    "keyword.type": { fg: resolved.syntaxType, bold: true, italic: true },
+    "keyword.return": style({ fg: resolved.syntaxKeyword, italic: true }),
+    "keyword.conditional": style({ fg: resolved.syntaxKeyword, italic: true }),
+    "keyword.repeat": style({ fg: resolved.syntaxKeyword, italic: true }),
+    "keyword.type": style({ fg: resolved.syntaxType, bold: true, italic: true }),
     "keyword.function": { fg: resolved.syntaxFunction },
     "keyword.operator": { fg: resolved.syntaxOperator },
-    "keyword.modifier": { fg: resolved.syntaxKeyword, italic: true },
-    "keyword.exception": { fg: resolved.syntaxKeyword, italic: true },
+    "keyword.modifier": style({ fg: resolved.syntaxKeyword, italic: true }),
+    "keyword.exception": style({ fg: resolved.syntaxKeyword, italic: true }),
     string: { fg: resolved.syntaxString },
     symbol: { fg: resolved.syntaxString },
-    comment: { fg: resolved.syntaxComment, italic: true },
-    "comment.documentation": { fg: resolved.syntaxComment, italic: true },
+    comment: style({ fg: resolved.syntaxComment, italic: true }),
+    "comment.documentation": style({ fg: resolved.syntaxComment, italic: true }),
     number: { fg: resolved.syntaxNumber },
     boolean: { fg: resolved.syntaxNumber },
     constant: { fg: resolved.syntaxNumber },
@@ -310,9 +318,9 @@ export function getSyntaxTheme(
     "markup.heading.6": { fg: resolved.markdownHeading, bold: true },
     "markup.bold": { fg: resolved.markdownStrong, bold: true },
     "markup.strong": { fg: resolved.markdownStrong, bold: true },
-    "markup.italic": { fg: resolved.markdownEmph, italic: true },
+    "markup.italic": style({ fg: resolved.markdownEmph, italic: true }),
     "markup.list": { fg: resolved.markdownListItem },
-    "markup.quote": { fg: resolved.markdownBlockQuote, italic: true },
+    "markup.quote": style({ fg: resolved.markdownBlockQuote, italic: true }),
     "markup.raw": { fg: resolved.markdownCode },
     "markup.raw.block": { fg: resolved.markdownCode },
     "markup.raw.inline": { fg: resolved.markdownCode },
