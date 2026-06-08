@@ -206,10 +206,12 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   const [terminalHeight, setTerminalHeight] = React.useState(initialHeight);
   const [scrollAcceleration] = React.useState(() => new ScrollAcceleration());
   const themeName = useAppStore((s) => s.themeName);
+  const italicsEnabled = useAppStore((s) => s.italicsEnabled);
   const [showDropdown, setShowDropdown] = React.useState(false);
   const [showThemePicker, setShowThemePicker] = React.useState(false);
   const [previewTheme, setPreviewTheme] = React.useState<string | null>(null);
-  const [currentFileIndex, setCurrentFileIndex] = React.useState(0);
+  const [currentFileIndex, setCurrentFileIndex] = React.useState<number | undefined>(0);
+  const [currentFolderPath, setCurrentFolderPath] = React.useState<string | undefined>(undefined);
   const [showSidebar, setShowSidebar] = React.useState(true);
   const [focusedPane, setFocusedPane] = React.useState<"diff" | "sidebar">("sidebar");
 
@@ -263,8 +265,13 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
       return;
     }
 
+    if (key.name === "i") {
+      useAppStore.setState({ italicsEnabled: !italicsEnabled });
+      return;
+    }
+
     if (key.name === "o") {
-      const file = parsedFiles[currentFileIndex];
+      const file = currentFileIndex !== undefined ? parsedFiles[currentFileIndex] : undefined;
       if (file) {
         const editor = process.env.EDITOR || "vi";
         const relativePath = getFileName(file).replace(/^[ab]\//, "");
@@ -462,11 +469,12 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
     }, 150);
 
     return () => clearTimeout(timeout);
-  }, [currentFileIndex, terminalHeight]);
+  }, [currentFileIndex, currentFolderPath, terminalHeight]);
 
   const handleFileSelect = (value: string) => {
     const index = parseInt(value, 10);
     setCurrentFileIndex(index);
+    setCurrentFolderPath(undefined);
     setShowDropdown(false);
     // Reset scroll when switching files via picker
     const scrollbox = scrollboxRef.current;
@@ -489,7 +497,87 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   };
 
   const renderCurrentFile = () => {
-    const file = parsedFiles[currentFileIndex];
+    if (currentFolderPath) {
+      const folderFiles = parsedFiles.filter((file) => {
+        const name = getFileName(file);
+        return name.startsWith(currentFolderPath + "/");
+      });
+
+      if (folderFiles.length === 0) {
+        return (
+          <box style={{ padding: 1 }}>
+            <text fg={mutedColor}>No changes in this folder</text>
+          </box>
+        );
+      }
+
+      const totalAdditions = folderFiles.reduce((sum, f) => sum + countChanges(f.hunks).additions, 0);
+      const totalDeletions = folderFiles.reduce((sum, f) => sum + countChanges(f.hunks).deletions, 0);
+
+      return (
+        <box style={{ flexDirection: "column" }}>
+          <box
+            style={{
+              paddingBottom: 1,
+              paddingLeft: 1,
+              paddingRight: 1,
+              flexShrink: 0,
+              flexDirection: "row",
+              alignItems: "center",
+            }}
+          >
+            <text fg={textColor}>{currentFolderPath}/</text>
+            <text fg="#2d8a47"> +{totalAdditions}</text>
+            <text fg="#c53b53"> -{totalDeletions}</text>
+            <text fg={mutedColor}> ({folderFiles.length} files)</text>
+          </box>
+          {folderFiles.map((file, idx) => {
+            const fileName = getFileName(file);
+            const oldFileName = getOldFileName(file);
+            const filetype = detectFiletype(fileName);
+            const { additions, deletions } = countChanges(file.hunks);
+            const viewMode = getViewMode(additions, deletions, diffPaneWidth);
+
+            return (
+              <box key={idx} style={{ flexDirection: "column" }}>
+                <box
+                  style={{
+                    paddingTop: idx > 0 ? 1 : 0,
+                    paddingBottom: 1,
+                    paddingLeft: 1,
+                    paddingRight: 1,
+                    flexShrink: 0,
+                    flexDirection: "row",
+                    alignItems: "center",
+                  }}
+                >
+                  {oldFileName ? (
+                    <>
+                      <text fg={mutedColor}>{oldFileName.trim()}</text>
+                      <text fg={mutedColor}> → </text>
+                      <text fg={textColor}>{fileName.trim()}</text>
+                    </>
+                  ) : (
+                    <text fg={textColor}>{fileName.trim()}</text>
+                  )}
+                  <text fg="#2d8a47"> +{additions}</text>
+                  <text fg="#c53b53"> -{deletions}</text>
+                </box>
+                <DiffView
+                  diff={file.rawDiff || ""}
+                  view={viewMode}
+                  filetype={filetype}
+                  themeName={activeTheme}
+                  italicsEnabled={italicsEnabled}
+                />
+              </box>
+            );
+          })}
+        </box>
+      );
+    }
+
+    const file = parsedFiles[currentFileIndex ?? 0];
     if (!file) return null;
 
     const fileName = getFileName(file);
@@ -527,6 +615,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
           view={viewMode}
           filetype={filetype}
           themeName={activeTheme}
+          italicsEnabled={italicsEnabled}
         />
       </box>
     );
@@ -623,8 +712,15 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
                 themeName={activeTheme}
                 width={DEFAULT_SIDEBAR_WIDTH}
                 activeFileIndex={currentFileIndex}
+                activeFolderPath={currentFolderPath}
                 onFileSelect={(fileIndex) => {
                   setCurrentFileIndex(fileIndex);
+                  setCurrentFolderPath(undefined);
+                  scrollboxRef.current?.scrollTo(0);
+                }}
+                onFolderSelect={(folderPath) => {
+                  setCurrentFolderPath(folderPath);
+                  setCurrentFileIndex(undefined);
                   scrollboxRef.current?.scrollTo(0);
                 }}
               />
@@ -686,6 +782,8 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
           <text fg={mutedColor}> theme  </text>
           <text fg={textColor}>b</text>
           <text fg={mutedColor}> sidebar  </text>
+          <text fg={textColor}>i</text>
+          <text fg={mutedColor}> {italicsEnabled ? "italic" : "no-italic"}  </text>
           <text fg={textColor}>o</text>
           <text fg={mutedColor}> edit  </text>
           <text fg={textColor}>tab</text>
@@ -712,6 +810,7 @@ cli
     description: "Filter files by glob pattern (can be used multiple times)",
   }))
   .option("--theme <name>", "Theme to use for rendering")
+  .option("--no-italics", "Disable italic text in syntax highlighting")
   .option("--cols <cols>", "Columns for scrollback output (default: terminal width)")
   .option("--stdin", "Read diff from stdin (for use as a pager)")
   .option("--no-stdin", "Ignore piped stdin, always read diff from git")
@@ -727,9 +826,12 @@ cli
       ensureGitRepo();
     }
 
-    // Apply theme if specified (zustand subscription auto-persists)
+    // Apply theme and italics if specified (zustand subscription auto-persists)
     if (options.theme && themeNames.includes(options.theme)) {
       useAppStore.setState({ themeName: options.theme });
+    }
+    if (options.noItalics) {
+      useAppStore.setState({ italicsEnabled: false });
     }
 
     // Build git command once (used by all modes)

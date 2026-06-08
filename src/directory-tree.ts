@@ -25,6 +25,8 @@ export interface TreeFileInfo {
 export interface TreeNode {
   /** Display path (may be collapsed, e.g., "src/components") */
   displayPath: string
+  /** Full path from repo root (e.g., "src/components") */
+  fullPath: string
   /** Whether this is a file (true) or directory (false) */
   isFile: boolean
   /** File index for scroll-to (only for files) */
@@ -47,6 +49,8 @@ export interface TreeNode {
 export interface HierarchicalTreeNode {
   /** Display path (may be collapsed, e.g., "src/components") */
   displayPath: string
+  /** Full path from repo root (e.g., "src/components") */
+  fullPath: string
   /** Whether this is a file (true) or directory (false) */
   isFile: boolean
   /** File index for scroll-to (only for files) */
@@ -93,6 +97,7 @@ function toHierarchical(nodes: InternalTreeNode[]): HierarchicalTreeNode[] {
 
     return {
       displayPath: collapsed.path,
+      fullPath: collapsed.originalNode.path,
       isFile,
       fileIndex: collapsed.originalNode.fileIndex,
       status: collapsed.originalNode.status,
@@ -236,6 +241,7 @@ function flattenTree(tree: InternalTreeNode[]): TreeNode[] {
 
     result.push({
       displayPath,
+      fullPath: collapsed.originalNode.path,
       isFile,
       fileIndex: collapsed.originalNode.fileIndex,
       status: collapsed.originalNode.status,
