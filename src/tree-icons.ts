@@ -1,8 +1,8 @@
 // Tree icon utilities for sidebar file/folder nerd font icons
 // Structured for easy future fallback to ASCII icons
 
-export const FOLDER_ICON_CLOSED = "󰝰"
-export const FOLDER_ICON_OPEN = "󰉋"
+export const FOLDER_ICON_CLOSED = "󰉋"
+export const FOLDER_ICON_OPEN = "󰝰"
 
 const extensionToIcon: Record<string, string> = {
   ts: "󰛦",

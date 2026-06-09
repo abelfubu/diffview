@@ -450,26 +450,20 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
     };
   });
 
-  // Debounced sidebar auto-reveal: scroll sidebar to keep Current File visible
-  React.useEffect(() => {
-    const timeout = setTimeout(() => {
-      const sidebarScrollbox = sidebarScrollboxRef.current;
-      if (!sidebarScrollbox) return;
+  // Synchronous sidebar scroll handler — keeps focused row in viewport
+  const handleSidebarFocusRowChange = React.useCallback((rowY: number) => {
+    const sidebarScrollbox = sidebarScrollboxRef.current;
+    if (!sidebarScrollbox) return;
 
-      const rowY = sidebarRef.current?.getActiveRowIndex() ?? 0;
-      const contentY = sidebarScrollbox.content?.y ?? 0;
-      const viewportTop = -contentY;
-      const viewportHeight = Math.max(3, terminalHeight - 3);
+    const viewportTop = sidebarScrollbox.scrollTop;
+    const viewportHeight = Math.max(1, sidebarScrollbox.viewport.height);
 
-      if (rowY < viewportTop) {
-        sidebarScrollbox.scrollTo(rowY);
-      } else if (rowY >= viewportTop + viewportHeight) {
-        sidebarScrollbox.scrollTo(Math.max(0, rowY - viewportHeight + 1));
-      }
-    }, 150);
-
-    return () => clearTimeout(timeout);
-  }, [currentFileIndex, currentFolderPath, terminalHeight]);
+    if (rowY < viewportTop) {
+      sidebarScrollbox.scrollTo(rowY);
+    } else if (rowY >= viewportTop + viewportHeight) {
+      sidebarScrollbox.scrollTo(Math.max(0, rowY - viewportHeight + 1));
+    }
+  }, []);
 
   const handleFileSelect = (value: string) => {
     const index = parseInt(value, 10);
@@ -713,6 +707,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
                 width={DEFAULT_SIDEBAR_WIDTH}
                 activeFileIndex={currentFileIndex}
                 activeFolderPath={currentFolderPath}
+                onFocusRowChange={handleSidebarFocusRowChange}
                 onFileSelect={(fileIndex) => {
                   setCurrentFileIndex(fileIndex);
                   setCurrentFolderPath(undefined);

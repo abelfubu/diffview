@@ -34,6 +34,8 @@ export interface DirectoryTreeViewProps {
   activeFileIndex?: number
   /** Path of the currently active folder (for highlight) */
   activeFolderPath?: string
+  /** Callback whenever the focused row index changes */
+  onFocusRowChange?: (rowIndex: number) => void
   /** Paths of folders that should start collapsed */
   initialCollapsedPaths?: string[]
 }
@@ -225,6 +227,7 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
       files,
       onFileSelect,
       onFolderSelect,
+      onFocusRowChange,
       themeName,
       width = DEFAULT_SIDEBAR_WIDTH,
       activeFileIndex,
@@ -252,6 +255,10 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
     React.useEffect(() => {
       setFocusedRowIndex((prev) => Math.min(prev, Math.max(0, visibleNodes.length - 1)))
     }, [visibleNodes.length])
+
+    React.useEffect(() => {
+      onFocusRowChange?.(focusedRowIndex)
+    }, [focusedRowIndex, onFocusRowChange])
 
     const activeFileFolders = React.useMemo(() => {
       const result = new Set<string>()
