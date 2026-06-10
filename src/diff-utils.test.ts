@@ -14,6 +14,8 @@ import {
   getOldFileName,
   buildGitCommand,
   buildSubmoduleDiffCommand,
+  getUntrackedFilePaths,
+  buildUntrackedFileDiff,
   filterParsedFilesByPatterns,
   getFilterPatterns,
   matchesFileFilters,
@@ -808,6 +810,39 @@ describe("buildSubmoduleDiffCommand", () => {
   it("should use DEFAULT_CONTEXT_LINES when no context is provided", () => {
     const cmd = buildSubmoduleDiffCommand(["opentui"], {})
     expect(cmd).toContain(`-U${DEFAULT_CONTEXT_LINES}`)
+  })
+})
+
+// ============================================================================
+// untracked file synthetic diffs
+// ============================================================================
+
+describe("getUntrackedFilePaths", () => {
+  it("should return an array (may be empty in a clean repo)", () => {
+    const paths = getUntrackedFilePaths()
+    expect(Array.isArray(paths)).toBe(true)
+  })
+})
+
+describe("buildUntrackedFileDiff", () => {
+  it("should return empty string for a non-existent file", () => {
+    const diff = buildUntrackedFileDiff("__definitely_does_not_exist_12345.txt")
+    expect(diff).toBe("")
+  })
+
+  it("should produce a parseable synthetic diff for an untracked file", () => {
+    const rawDiff = buildUntrackedFileDiff("src/diff-utils.ts")
+    expect(rawDiff).toContain("diff --git src/diff-utils.ts src/diff-utils.ts")
+    expect(rawDiff).toContain("new file mode 100644")
+    expect(rawDiff).toContain("--- /dev/null")
+    expect(rawDiff).toContain("+++ src/diff-utils.ts")
+    expect(rawDiff).toContain("@@ -0,0 +1,")
+
+    // Should be parseable by parsePatch
+    const files = parseGitDiffFiles(rawDiff, parsePatch)
+    expect(files.length).toBe(1)
+    expect(files[0]!.newFileName).toBe("src/diff-utils.ts")
+    expect(files[0]!.hunks.length).toBeGreaterThan(0)
   })
 })
 

@@ -3,6 +3,8 @@
 // and provides helpers for unified/split view mode selection.
 
 import { execSync } from "child_process"
+import fs from "fs"
+import { join } from "path"
 import { buildDirectoryTree } from "./directory-tree.js"
 
 /**
@@ -368,7 +370,9 @@ export function buildGitCommand(options: GitCommandOptions): string {
   // Default (no args): ignore submodules here — dirty submodule diffs are fetched
   // separately via buildSubmoduleDiffCommand() to avoid showing committed submodule
   // ref changes that have no actual uncommitted content.
-  return `git add -N . && git diff --no-prefix ${renameArg} --ignore-submodules=all ${contextArg} ${filterArg}`.trim();
+  // Untracked files are appended synthetically in the caller to avoid mutating the
+  // git index (git add -N would modify .git/index).
+  return `git diff --no-prefix ${renameArg} --ignore-submodules=all ${contextArg} ${filterArg}`.trim();
 }
 
 /**
@@ -417,6 +421,78 @@ export function buildSubmoduleDiffCommand(
   const submoduleArg = "--submodule=diff"
   const pathArgs = submodulePaths.map((p) => `'${p}'`).join(" ")
   return `git diff --no-prefix ${renameArg} ${submoduleArg} ${contextArg} -- ${pathArgs}`.trim()
+}
+
+/**
+ * Get paths of untracked files in the working tree.
+ */
+export function getUntrackedFilePaths(): string[] {
+  try {
+    const output = execSync(
+      "git ls-files --others --exclude-standard",
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
+    )
+    return output
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Check if a buffer contains binary (non-text) content.
+ * Uses the same heuristic as git: look for null bytes in the first 8000 bytes.
+ */
+function isBinaryContent(buffer: Buffer): boolean {
+  const sample = buffer.slice(0, 8000)
+  for (let i = 0; i < sample.length; i++) {
+    if (sample[i] === 0) return true
+  }
+  return false
+}
+
+/**
+ * Generate a synthetic git diff for an untracked file.
+ * Produces output equivalent to `git add -N <file> && git diff <file>`.
+ */
+export function buildUntrackedFileDiff(filePath: string): string {
+  const repoRoot = getGitRepoRoot()
+  const fullPath = join(repoRoot, filePath)
+
+  let content: string
+  try {
+    const buffer = fs.readFileSync(fullPath)
+    if (isBinaryContent(buffer)) {
+      // Binary files: emit a minimal diff without hunks
+      return `diff --git ${filePath} ${filePath}\nnew file mode 100644\nindex 0000000..e69de29\n--- /dev/null\n+++ ${filePath}\n`
+    }
+    content = buffer.toString("utf-8")
+  } catch {
+    return ""
+  }
+
+  // Handle trailing newline: git diff strips it from the last line
+  const endsWithNewline = content.endsWith("\n")
+  const lines = content.split("\n")
+  // split("\n") on trailing newline gives an extra empty string at the end
+  if (endsWithNewline) {
+    lines.pop()
+  }
+
+  const lineCount = lines.length
+  if (lineCount === 0) {
+    return `diff --git ${filePath} ${filePath}\nnew file mode 100644\nindex 0000000..e69de29\n--- /dev/null\n+++ ${filePath}\n`
+  }
+
+  const hunkHeader = `@@ -0,0 +1,${lineCount} @@`
+  const diffLines = lines.map((line) => "+" + line).join("\n")
+
+  // If file doesn't end with newline, mark it
+  const noNewlineMarker = endsWithNewline ? "" : "\n\\ No newline at end of file"
+
+  return `diff --git ${filePath} ${filePath}\nnew file mode 100644\nindex 0000000..e69de29\n--- /dev/null\n+++ ${filePath}\n${hunkHeader}\n${diffLines}${noNewlineMarker}`
 }
 
 /**

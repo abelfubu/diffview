@@ -54,6 +54,8 @@ import {
   parseGitDiffFiles,
   getDirtySubmodulePaths,
   buildSubmoduleDiffCommand,
+  getUntrackedFilePaths,
+  buildUntrackedFileDiff,
   getFilterPatterns,
   IGNORED_FILES,
   type ParsedFile,
@@ -891,6 +893,15 @@ cli
         }
       }
 
+      // Append synthetic diffs for untracked files without modifying the git index.
+      const untrackedPaths = getUntrackedFilePaths();
+      for (const untrackedPath of untrackedPaths) {
+        const untrackedDiff = buildUntrackedFileDiff(untrackedPath);
+        if (untrackedDiff) {
+          diffContent = diffContent + "\n" + untrackedDiff;
+        }
+      }
+
       diffContent = await filterCombinedDiffByPatterns(diffContent, {
         filter: options.filter,
         positionalFilters: options['--'],
@@ -1015,6 +1026,15 @@ cli
                     }
                   } catch {
                     // Submodule diff failed — skip
+                  }
+                }
+
+                // Append synthetic diffs for untracked files without modifying the git index.
+                const untrackedPaths = getUntrackedFilePaths();
+                for (const untrackedPath of untrackedPaths) {
+                  const untrackedDiff = buildUntrackedFileDiff(untrackedPath);
+                  if (untrackedDiff) {
+                    fullDiff = fullDiff + "\n" + untrackedDiff;
                   }
                 }
               }
