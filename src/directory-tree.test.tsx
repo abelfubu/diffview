@@ -310,7 +310,7 @@ describe("DirectoryTreeView component", () => {
 
 		await testSetup.renderOnce()
 		const frame = testSetup.captureCharFrame()
-		expect(frame).toContain("󰉋")
+		expect(frame).toContain("󰝰")
 	})
 
 	it("renders file-type icon on file rows", async () => {
@@ -454,8 +454,8 @@ describe("DirectoryTreeView component", () => {
 
 		await testSetup.renderOnce()
 		const frame = testSetup.captureCharFrame()
-		expect(frame).toContain("󰝰")
-		expect(frame).not.toContain("󰉋")
+		expect(frame).toContain("󰉋")
+		expect(frame).not.toContain("󰝰")
 	})
 
 	it("collapsing compressed tree path hides entire chain", async () => {

@@ -224,7 +224,7 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-        󰉋 src
+        󰝰 src
           󰛦 hello.ts (+1,-1)
 
 
@@ -290,7 +290,7 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-        󰉋 src
+        󰝰 src
           󰛦 index.ts (+2)
           󰛦 logger.ts (+5)
 
@@ -334,7 +334,7 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-        󰉋 src
+        󰝰 src
           󰛦 deprecated.ts (-4)
 
 
@@ -359,7 +359,7 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-        󰉋 src
+        󰝰 src
           󰛦 utils.ts (+7)
 
 
@@ -424,7 +424,7 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-        󰉋 src
+        󰝰 src
           󰛦 new-name.ts (+1,-1)
 
 
@@ -476,7 +476,7 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-        󰉋 src
+        󰝰 src
           󰛦 hello.ts (+1,-1)
 
 
@@ -499,7 +499,7 @@ describe("--stdin pager mode (lazygit issue #25)", () => {
 
     expect(trimmed).toMatchInlineSnapshot(`
       "
-        󰉋 src
+        󰝰 src
           󰛦 hello.ts (+1,-1)
 
 

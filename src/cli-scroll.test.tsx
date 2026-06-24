@@ -324,7 +324,7 @@ describe("App scrollbox", () => {
 
     const afterCollapse = testSetup.captureCharFrame()
     // Sidebar shows closed folder icon, no TypeScript file icons
-    expect(afterCollapse).toContain("󰝰")
+    expect(afterCollapse).toContain("󰉋")
     expect(afterCollapse).not.toContain("󰛦")
 
     // Press h to expand the folder
@@ -336,7 +336,7 @@ describe("App scrollbox", () => {
 
     const afterExpand = testSetup.captureCharFrame()
     // Sidebar shows open folder icon and TypeScript file icons again
-    expect(afterExpand).toContain("󰉋")
+    expect(afterExpand).toContain("󰝰")
     expect(afterExpand).toContain("󰛦")
   })
 })
