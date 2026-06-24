@@ -83,7 +83,7 @@ function blendWithBackground(color: RGBA, bg: RGBA): [number, number, number] {
 export function spanToAnsi(
   span: CapturedSpan,
   level: ColorLevel,
-  themeBg: RGBA
+  themeBg: RGBA | undefined
 ): string {
   // No colors - return plain text
   if (level === 0) return span.text
@@ -92,7 +92,7 @@ export function spanToAnsi(
 
   // Foreground color
   if (span.fg.a > 0.01) {
-    const [r, g, b] = blendWithBackground(span.fg, themeBg)
+    const [r, g, b] = themeBg ? blendWithBackground(span.fg, themeBg) : [span.fg.r, span.fg.g, span.fg.b]
     if (level === 3) {
       // Truecolor
       codes.push(`38;2;${Math.round(r * 255)};${Math.round(g * 255)};${Math.round(b * 255)}`)
@@ -108,7 +108,7 @@ export function spanToAnsi(
 
   // Background color
   if (span.bg.a > 0.01) {
-    const [r, g, b] = blendWithBackground(span.bg, themeBg)
+    const [r, g, b] = themeBg ? blendWithBackground(span.bg, themeBg) : [span.bg.r, span.bg.g, span.bg.b]
     if (level === 3) {
       // Truecolor
       codes.push(`48;2;${Math.round(r * 255)};${Math.round(g * 255)};${Math.round(b * 255)}`)
@@ -150,7 +150,7 @@ function isLineEmpty(line: CapturedLine): boolean {
  */
 export function frameToAnsi(
   frame: CapturedFrame,
-  themeBg: RGBA,
+  themeBg: RGBA | undefined,
   options: { trimEmptyLines?: boolean } = {}
 ): string {
   const { trimEmptyLines = true } = options

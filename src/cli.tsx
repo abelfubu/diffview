@@ -25,6 +25,7 @@ import {
   MacOSScrollAccel,
   ScrollBoxRenderable,
   addDefaultParsers,
+  RGBA,
 } from "@opentuah/core";
 import parsersConfig from "./parsers-config.js";
 
@@ -113,7 +114,8 @@ async function runScrollbackMode(
     });
 
     const theme = getResolvedTheme(themeName);
-    const ansi = frameToAnsi(frame, theme.background);
+    const transparentBackground = persistedState.transparentBackground ?? false;
+    const ansi = frameToAnsi(frame, transparentBackground ? undefined : theme.background);
 
     process.stdout.write(ansi + "\n");
     process.exit(0);
@@ -209,6 +211,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   const [scrollAcceleration] = React.useState(() => new ScrollAcceleration());
   const themeName = useAppStore((s) => s.themeName);
   const italicsEnabled = useAppStore((s) => s.italicsEnabled);
+  const transparentBackground = useAppStore((s) => s.transparentBackground);
   const [showDropdown, setShowDropdown] = React.useState(false);
   const [showThemePicker, setShowThemePicker] = React.useState(false);
   const [previewTheme, setPreviewTheme] = React.useState<string | null>(null);
@@ -236,6 +239,12 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   );
 
   const renderer = useRenderer();
+  const transparentBg = RGBA.fromInts(0, 0, 0, 0);
+
+  // Force a redraw when transparency is toggled so the terminal background shows through
+  React.useEffect(() => {
+    renderer.root.requestRender();
+  }, [transparentBackground]);
 
   useKeyboard((key) => {
     if (showDropdown || showThemePicker) {
@@ -256,6 +265,12 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
       setShowDropdown(true);
       return;
     }
+
+    if ((key.shift && key.name === "t") || key.name === "T") {
+      useAppStore.setState({ transparentBackground: !transparentBackground });
+      return;
+    }
+
 
     if (key.name === "t") {
       setShowThemePicker(true);
@@ -411,7 +426,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
         onMouseUp={onMouseUp}
         style={{
           padding: 1,
-          backgroundColor: getResolvedTheme(themeName).background,
+          backgroundColor: transparentBackground ? transparentBg : getResolvedTheme(themeName).background,
         }}
       >
         <text>No files to display</text>
@@ -422,8 +437,8 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   // Use preview theme if hovering, otherwise use selected theme
   const activeTheme = previewTheme ?? themeName;
   const resolvedTheme = getResolvedTheme(activeTheme);
-  const bgColor = resolvedTheme.background;
-  const sidebarBgColor = rgbaToHex(resolvedTheme.backgroundPanel);
+  const bgColor = transparentBackground ? transparentBg : resolvedTheme.background;
+  const sidebarBgColor = transparentBackground ? transparentBg : rgbaToHex(resolvedTheme.backgroundPanel);
   const textColor = rgbaToHex(resolvedTheme.text);
   const mutedColor = rgbaToHex(resolvedTheme.textMuted);
   const availableContentWidth = Math.max(20, width - APP_HORIZONTAL_PADDING);
@@ -565,6 +580,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
                   filetype={filetype}
                   themeName={activeTheme}
                   italicsEnabled={italicsEnabled}
+                  transparentBackground={transparentBackground}
                 />
               </box>
             );
@@ -612,6 +628,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
           filetype={filetype}
           themeName={activeTheme}
           italicsEnabled={italicsEnabled}
+          transparentBackground={transparentBackground}
         />
       </box>
     );
@@ -709,6 +726,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
                 width={DEFAULT_SIDEBAR_WIDTH}
                 activeFileIndex={currentFileIndex}
                 activeFolderPath={currentFolderPath}
+                transparentBackground={transparentBackground}
                 onFocusRowChange={handleSidebarFocusRowChange}
                 onFileSelect={(fileIndex) => {
                   setCurrentFileIndex(fileIndex);
@@ -781,6 +799,8 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
           <text fg={mutedColor}> sidebar  </text>
           <text fg={textColor}>i</text>
           <text fg={mutedColor}> {italicsEnabled ? "italic" : "no-italic"}  </text>
+          <text fg={textColor}>T</text>
+          <text fg={mutedColor}> {transparentBackground ? "transparent" : "opaque"}  </text>
           <text fg={textColor}>o</text>
           <text fg={mutedColor}> edit  </text>
           <text fg={textColor}>tab</text>
@@ -808,6 +828,7 @@ cli
   }))
   .option("--theme <name>", "Theme to use for rendering")
   .option("--no-italics", "Disable italic text in syntax highlighting")
+  .option("--transparent", "Use transparent background")
   .option("--cols <cols>", "Columns for scrollback output (default: terminal width)")
   .option("--stdin", "Read diff from stdin (for use as a pager)")
   .option("--no-stdin", "Ignore piped stdin, always read diff from git")
@@ -829,6 +850,9 @@ cli
     }
     if (options.noItalics) {
       useAppStore.setState({ italicsEnabled: false });
+    }
+    if (options.transparent) {
+      useAppStore.setState({ transparentBackground: true });
     }
 
     // Build git command once (used by all modes)

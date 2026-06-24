@@ -15,6 +15,7 @@ const STATE_FILE = join(STATE_DIR, "state.json")
 export interface PersistedState {
   themeName?: string
   italicsEnabled?: boolean
+  transparentBackground?: boolean
 }
 
 export function loadPersistedState(): PersistedState {
@@ -44,16 +45,22 @@ export interface AppState {
   // Shared
   themeName: string
   italicsEnabled: boolean
+  transparentBackground: boolean
 }
 
 export const useAppStore = create<AppState>(() => ({
   themeName: persistedState.themeName ?? defaultThemeName,
   italicsEnabled: persistedState.italicsEnabled ?? true,
+  transparentBackground: persistedState.transparentBackground ?? false,
 }))
 
 // Subscribe to persist state changes
 useAppStore.subscribe((state) => {
-  savePersistedState({ themeName: state.themeName, italicsEnabled: state.italicsEnabled })
+  savePersistedState({
+    themeName: state.themeName,
+    italicsEnabled: state.italicsEnabled,
+    transparentBackground: state.transparentBackground,
+  })
 })
 
 // Re-export persisted state for initial reads

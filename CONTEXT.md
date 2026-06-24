@@ -20,6 +20,9 @@ A file present in the working tree but not yet tracked by git. `dv` displays unt
 **Synthetic diff**  
 A diff block constructed programmatically (not produced by `git diff`) to display content that git does not natively include in its diff output. Used for untracked files to avoid modifying the git index.
 
+**Transparent background**  
+A rendering mode where `dv` does not paint explicit background colors, letting the terminal's own background show through. Useful for terminal emulators with background images or semi-transparent windows. Configurable via `~/.config/dv/state.json` (`transparentBackground`) or the `--transparent` CLI flag, and toggled at runtime with `T`.
+
 **Working tree**  
 The current state of files on disk, including tracked modifications and untracked files.
 

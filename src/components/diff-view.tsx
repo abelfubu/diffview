@@ -16,6 +16,8 @@ export interface DiffViewProps {
   wrapMode?: "word" | "char" | "none"
   /** Enable italics in syntax highlighting (default: true) */
   italicsEnabled?: boolean
+  /** Use the terminal's default background instead of theme panel backgrounds */
+  transparentBackground?: boolean
 }
 
 function getLuminance(color: RGBA): number {
@@ -72,7 +74,7 @@ function getWordHighlightBg(base: RGBA): string {
   return rgbaToHex(candidate)
 }
 
-export function DiffView({ diff, view, filetype, themeName, wrapMode = "word", italicsEnabled = true }: DiffViewProps): React.ReactNode {
+export function DiffView({ diff, view, filetype, themeName, wrapMode = "word", italicsEnabled = true, transparentBackground = false }: DiffViewProps): React.ReactNode {
   // Balance paired delimiters (backticks, triple quotes, etc.) before
   // passing to <diff> so tree-sitter doesn't misparse hunks that start
   // inside a multi-line string
@@ -92,15 +94,16 @@ export function DiffView({ diff, view, filetype, themeName, wrapMode = "word", i
   )
 
   // Convert RGBA to hex for diff component props
+  const transparentBg = React.useMemo(() => RGBA.fromInts(0, 0, 0, 0), [])
   const colors = React.useMemo(() => ({
     text: rgbaToHex(resolvedTheme.text),
-    bgPanel: rgbaToHex(resolvedTheme.backgroundPanel),
+    bgPanel: transparentBackground ? transparentBg : rgbaToHex(resolvedTheme.backgroundPanel),
     diffAddedBg: rgbaToHex(resolvedTheme.diffAddedBg),
     diffRemovedBg: rgbaToHex(resolvedTheme.diffRemovedBg),
     diffLineNumber: rgbaToHex(resolvedTheme.diffLineNumber),
     diffAddedLineNumberBg: rgbaToHex(resolvedTheme.diffAddedLineNumberBg),
     diffRemovedLineNumberBg: rgbaToHex(resolvedTheme.diffRemovedLineNumberBg),
-  }), [resolvedTheme])
+  }), [resolvedTheme, transparentBackground, transparentBg])
 
   const wordHighlights = React.useMemo(() => ({
     addedWordBg: getWordHighlightBg(resolvedTheme.diffAddedBg),

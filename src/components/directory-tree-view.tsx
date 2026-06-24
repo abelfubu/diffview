@@ -4,6 +4,7 @@
 // Supports fixed-width sidebar rendering with filename-preserving truncation.
 
 import * as React from "react"
+import { RGBA } from "@opentuah/core"
 import { buildHierarchicalTree, type HierarchicalTreeNode, type TreeFileInfo, type TreeNode } from "../directory-tree.js"
 import { getResolvedTheme, rgbaToHex } from "../themes.js"
 import { FOLDER_ICON_CLOSED, FOLDER_ICON_OPEN, getFileIcon } from "../tree-icons.js"
@@ -38,6 +39,8 @@ export interface DirectoryTreeViewProps {
   onFocusRowChange?: (rowIndex: number) => void
   /** Paths of folders that should start collapsed */
   initialCollapsedPaths?: string[]
+  /** Use the terminal's default background instead of theme panel backgrounds */
+  transparentBackground?: boolean
 }
 
 /**
@@ -112,6 +115,7 @@ interface TreeNodeLineProps {
   isActive?: boolean
   isFocused?: boolean
   isCollapsed?: boolean
+  transparentBackground?: boolean
 }
 
 /**
@@ -127,6 +131,7 @@ function TreeNodeLine({
   isActive,
   isFocused,
   isCollapsed,
+  transparentBackground,
 }: TreeNodeLineProps): React.ReactNode {
   const [isHovered, setIsHovered] = React.useState(false)
   const treePrefix = `${node.prefix}${node.connector}`
@@ -148,7 +153,7 @@ function TreeNodeLine({
 
     const activeBg = isActive ? rgbaToHex(theme.primary.brighten(0.3)) : undefined
     const focusBg = isFocused ? rgbaToHex(theme.primary.brighten(0.15)) : undefined
-    const hoverBg = isHovered ? rgbaToHex(theme.backgroundPanel) : undefined
+    const hoverBg = isHovered && !transparentBackground ? rgbaToHex(theme.backgroundPanel) : RGBA.fromInts(0, 0, 0, 0)
     const bgColor = activeBg ?? focusBg ?? hoverBg
 
     return (
@@ -233,6 +238,7 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
       activeFileIndex,
       activeFolderPath,
       initialCollapsedPaths = [],
+      transparentBackground,
     },
     ref,
   ): React.ReactNode {
@@ -396,6 +402,7 @@ export const DirectoryTreeView = React.forwardRef<DirectoryTreeViewRef, Director
             }
             isFocused={idx === focusedRowIndex}
             isCollapsed={!node.isFile && collapsedPaths.has(node.displayPath)}
+            transparentBackground={transparentBackground}
             onSelect={
               node.isFile && node.fileIndex !== undefined && onFileSelect
                 ? () => onFileSelect(node.fileIndex!)
