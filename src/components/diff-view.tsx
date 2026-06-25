@@ -24,7 +24,7 @@ export interface DiffViewProps {
   cursorLine?: number
   /** Inclusive start/end of the current selection, or null */
   selection?: { start: number; end: number } | null
-  /** Background color for the cursor line (defaults to theme-aware translucent white) */
+  /** Background color for the cursor line (defaults to the sidebar active-file color) */
   cursorColor?: string
   /** Background color for selected lines (defaults to selectionBg) */
   selectionColor?: string
@@ -136,11 +136,10 @@ export function DiffView({
 
   const activeCursorColor = React.useMemo(() => {
     if (cursorColor) return cursorColor
-    const base = resolvedTheme.backgroundPanel
-    const luminance = getLuminance(base)
-    // Subtle translucent overlay that works on both light and dark panels.
-    return luminance >= 0.52 ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.10)"
-  }, [cursorColor, resolvedTheme.backgroundPanel])
+    // Match the sidebar's active-file background so the focused cursor line
+    // feels visually consistent with the file navigator.
+    return rgbaToHex(resolvedTheme.primary.brighten(0.3))
+  }, [cursorColor, resolvedTheme.primary])
 
   const activeSelectionColor = React.useMemo(() => {
     return selectionColor ?? "#264F78"
