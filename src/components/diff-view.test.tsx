@@ -352,4 +352,65 @@ describe("DiffView", () => {
       expect.arrayContaining(["const", "endpoint", "=", '"unknown"']),
     )
   })
+
+  it("highlights the cursor line when focused", async () => {
+    testSetup = await setupTest(
+      <DiffView
+        diff={sampleDiff}
+        view="unified"
+        filetype="txt"
+        themeName="github"
+        focused
+        cursorLine={2}
+        cursorColor="#123456"
+      />,
+      {
+        width: 80,
+        height: 8,
+      },
+    )
+
+    await testSetup.renderOnce()
+
+    const frame = testSetup.captureSpans()
+    // Logical line order for sampleDiff: 0 hunk-header, 1 removed "old", 2 added "new", 3 context "keep"
+    const addedLine = frame.lines[2]
+    expect(addedLine).toBeDefined()
+    const cursorBg = Array.from(addedLine!.spans[0]!.bg.buffer)
+    expect(cursorBg.slice(0, 3)).toEqual([
+      expect.closeTo(18 / 255, 4),
+      expect.closeTo(52 / 255, 4),
+      expect.closeTo(86 / 255, 4),
+    ])
+  })
+
+  it("does not highlight a cursor line when not focused", async () => {
+    testSetup = await setupTest(
+      <DiffView
+        diff={sampleDiff}
+        view="unified"
+        filetype="txt"
+        themeName="github"
+        focused={false}
+        cursorLine={2}
+        cursorColor="#123456"
+      />,
+      {
+        width: 80,
+        height: 8,
+      },
+    )
+
+    await testSetup.renderOnce()
+
+    const frame = testSetup.captureSpans()
+    const addedLine = frame.lines[2]
+    expect(addedLine).toBeDefined()
+    const cursorBg = Array.from(addedLine!.spans[0]!.bg.buffer)
+    expect(cursorBg.slice(0, 3)).not.toEqual([
+      expect.closeTo(18 / 255, 4),
+      expect.closeTo(52 / 255, 4),
+      expect.closeTo(86 / 255, 4),
+    ])
+  })
 })

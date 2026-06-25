@@ -44,5 +44,14 @@ Diff rendering mode where old and new content are interleaved (preceded by `-` a
 **Split view**  
 Diff rendering mode where old and new content are shown side by side. Used when terminal width exceeds the split threshold.
 
+**Cursor line**  
+The currently highlighted logical line in the diff pane. Visible only when the diff pane has focus.
+
+**Selection anchor**  
+The logical line where a keyboard selection started (set by pressing `v`). The selection extends from the anchor to the current cursor line.
+
+**New content**  
+The code as it will exist after the change: context lines and added lines from a diff. Removed lines are excluded when copying with `y`.
+
 **Scrollback mode**  
 Non-interactive output written directly to the terminal scrollback, used when stdout is not a TTY or when `--scrollback` is passed.

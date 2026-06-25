@@ -3,7 +3,7 @@
 // Supports split and unified view modes with line numbers.
 
 import * as React from "react"
-import { RGBA, SyntaxStyle } from "@opentuah/core"
+import { DiffRenderable, RGBA, SyntaxStyle } from "@opentuah/core"
 import { getSyntaxTheme, getResolvedTheme, rgbaToHex } from "../themes.js"
 import { balanceDelimiters } from "../balance-delimiters.js"
 
@@ -18,6 +18,16 @@ export interface DiffViewProps {
   italicsEnabled?: boolean
   /** Use the terminal's default background instead of theme panel backgrounds */
   transparentBackground?: boolean
+  /** Whether the diff pane is focused and should show the cursor line */
+  focused?: boolean
+  /** 0-based logical line index of the cursor */
+  cursorLine?: number
+  /** Inclusive start/end of the current selection, or null */
+  selection?: { start: number; end: number } | null
+  /** Background color for the cursor line (defaults to theme-aware translucent white) */
+  cursorColor?: string
+  /** Background color for selected lines (defaults to selectionBg) */
+  selectionColor?: string
 }
 
 function getLuminance(color: RGBA): number {
@@ -74,7 +84,21 @@ function getWordHighlightBg(base: RGBA): string {
   return rgbaToHex(candidate)
 }
 
-export function DiffView({ diff, view, filetype, themeName, wrapMode = "word", italicsEnabled = true, transparentBackground = false }: DiffViewProps): React.ReactNode {
+export function DiffView({
+  diff,
+  view,
+  filetype,
+  themeName,
+  wrapMode = "word",
+  italicsEnabled = true,
+  transparentBackground = false,
+  focused = false,
+  cursorLine = 0,
+  selection = null,
+  cursorColor,
+  selectionColor,
+}: DiffViewProps): React.ReactNode {
+  const diffRef = React.useRef<DiffRenderable | null>(null)
   // Balance paired delimiters (backticks, triple quotes, etc.) before
   // passing to <diff> so tree-sitter doesn't misparse hunks that start
   // inside a multi-line string
@@ -110,9 +134,62 @@ export function DiffView({ diff, view, filetype, themeName, wrapMode = "word", i
     removedWordBg: getWordHighlightBg(resolvedTheme.diffRemovedBg),
   }), [resolvedTheme])
 
+  const activeCursorColor = React.useMemo(() => {
+    if (cursorColor) return cursorColor
+    const base = resolvedTheme.backgroundPanel
+    const luminance = getLuminance(base)
+    // Subtle translucent overlay that works on both light and dark panels.
+    return luminance >= 0.52 ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.10)"
+  }, [cursorColor, resolvedTheme.backgroundPanel])
+
+  const activeSelectionColor = React.useMemo(() => {
+    return selectionColor ?? "#264F78"
+  }, [selectionColor])
+
+  // Track previously-applied highlights so we can clear only our own overrides.
+  const prevCursorRef = React.useRef<{ line: number; color: string } | null>(null)
+  const prevSelectionRef = React.useRef<{ start: number; end: number; color: string } | null>(null)
+
+  // Apply cursor line and selection highlights to the underlying DiffRenderable.
+  React.useEffect(() => {
+    const diffRenderable = diffRef.current
+    if (!diffRenderable) return
+
+    // Clear previous cursor override.
+    if (prevCursorRef.current) {
+      diffRenderable.clearLineColor(prevCursorRef.current.line)
+    }
+
+    // Clear previous selection overrides.
+    if (prevSelectionRef.current) {
+      diffRenderable.clearHighlightLines(
+        prevSelectionRef.current.start,
+        prevSelectionRef.current.end,
+      )
+    }
+
+    prevCursorRef.current = null
+    prevSelectionRef.current = null
+
+    if (!focused) return
+
+    if (selection) {
+      const start = Math.min(selection.start, selection.end)
+      const end = Math.max(selection.start, selection.end)
+      if (end >= start) {
+        diffRenderable.highlightLines(start, end, activeSelectionColor)
+        prevSelectionRef.current = { start, end, color: activeSelectionColor }
+      }
+    }
+
+    diffRenderable.setLineColor(cursorLine, activeCursorColor)
+    prevCursorRef.current = { line: cursorLine, color: activeCursorColor }
+  }, [focused, cursorLine, selection, activeCursorColor, activeSelectionColor])
+
   return (
     <box key={themeName} style={{ backgroundColor: colors.bgPanel }}>
       <diff
+        ref={diffRef}
         diff={balancedDiff}
         view={view}
         fg={colors.text}

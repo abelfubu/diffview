@@ -17,6 +17,8 @@ import {
   useTerminalDimensions,
 } from "@opentuah/react";
 import { useCopySelection } from "./hooks/use-copy-selection.js";
+import { buildUnifiedLogicalLines, extractSelectedNewContent } from "./diff-cursor-utils.js";
+import { copyToClipboardWithRenderer, copyToClipboardWithRendererSync } from "./clipboard.js";
 import * as React from "react";
 import { exec, execSync, spawnSync } from "child_process";
 import { promisify } from "util";
@@ -220,6 +222,10 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   const [showSidebar, setShowSidebar] = React.useState(true);
   const [focusedPane, setFocusedPane] = React.useState<"diff" | "sidebar">("sidebar");
 
+  // Cursor/selection state for the diff pane
+  const [cursorLine, setCursorLine] = React.useState(0);
+  const [selectionAnchor, setSelectionAnchor] = React.useState<number | null>(null);
+
   // Refs for scroll functionality
   const scrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
   const sidebarScrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
@@ -227,6 +233,32 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
 
   // Ref for double-tap detection (gg)
   const lastKeyRef = React.useRef<{ key: string; time: number } | null>(null);
+
+  // Logical diff lines for the currently rendered file, used for bounds and copy
+  const logicalLinesRef = React.useRef<ReturnType<typeof buildUnifiedLogicalLines>>([]);
+
+  const maxCursorLine = React.useCallback(() => Math.max(0, logicalLinesRef.current.length - 1), []);
+
+  const resetCursor = React.useCallback(() => {
+    setCursorLine(0);
+    setSelectionAnchor(null);
+  }, []);
+
+  const clampCursor = React.useCallback((line: number) => {
+    return Math.max(0, Math.min(line, maxCursorLine()));
+  }, [maxCursorLine]);
+
+  const scrollCursorIntoView = React.useCallback(() => {
+    const scrollbox = scrollboxRef.current;
+    if (!scrollbox) return;
+    const viewportTop = scrollbox.scrollTop;
+    const viewportHeight = Math.max(1, scrollbox.viewport.height);
+    if (cursorLine < viewportTop) {
+      scrollbox.scrollTo(cursorLine);
+    } else if (cursorLine >= viewportTop + viewportHeight) {
+      scrollbox.scrollTo(Math.max(0, cursorLine - viewportHeight + 1));
+    }
+  }, [cursorLine]);
 
   // Copy selection to clipboard on mouse release
   const { onMouseUp } = useCopySelection();
@@ -241,10 +273,59 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   const renderer = useRenderer();
   const transparentBg = RGBA.fromInts(0, 0, 0, 0);
 
+  // Copy selected new-content lines + file path as a markdown code block.
+  const copySelectionToClipboard = React.useCallback(() => {
+    const file = currentFileIndex !== undefined ? parsedFiles[currentFileIndex] : undefined;
+    if (!file) return;
+
+    const anchor = selectionAnchor ?? cursorLine;
+    const { code, startLineNum } = extractSelectedNewContent(logicalLinesRef.current, anchor, cursorLine);
+    if (!code) return;
+
+    const fileName = getFileName(file);
+    const oldFileName = getOldFileName(file);
+    const pathHeader = oldFileName ? `${oldFileName} → ${fileName}` : fileName;
+    const lang = detectFiletype(fileName) || "";
+    const lineAttr = startLineNum !== undefined ? `:${startLineNum}` : "";
+
+    const markdown = ["```" + lang, `// ${pathHeader}${lineAttr}`, code, "```"].join("\n");
+
+    try {
+      copyToClipboardWithRendererSync(markdown, renderer);
+    } catch {
+      // Silent fail - user can manually copy if needed
+    }
+  }, [currentFileIndex, cursorLine, parsedFiles, renderer, selectionAnchor]);
+
   // Force a redraw when transparency is toggled so the terminal background shows through
   React.useEffect(() => {
     renderer.root.requestRender();
   }, [transparentBackground]);
+
+  // Keep logical line model in sync with the rendered file and reset cursor on file change.
+  React.useEffect(() => {
+    if (currentFolderPath) {
+      logicalLinesRef.current = [];
+      resetCursor();
+      return;
+    }
+    const file = currentFileIndex !== undefined ? parsedFiles[currentFileIndex] : undefined;
+    logicalLinesRef.current = file?.rawDiff ? buildUnifiedLogicalLines(file.rawDiff) : [];
+    resetCursor();
+  }, [currentFileIndex, currentFolderPath, parsedFiles, resetCursor]);
+
+  // Auto-scroll the diff viewport so the cursor line stays visible.
+  React.useEffect(() => {
+    if (focusedPane !== "diff" || currentFolderPath) return;
+    scrollCursorIntoView();
+  }, [cursorLine, focusedPane, currentFolderPath, scrollCursorIntoView]);
+
+  // Hide selection when leaving the diff pane.
+  React.useEffect(() => {
+    if (focusedPane !== "diff") {
+      setSelectionAnchor(null);
+    }
+  }, [focusedPane]);
 
   useKeyboard((key) => {
     if (showDropdown || showThemePicker) {
@@ -257,6 +338,10 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
     }
 
     if (key.name === "escape" || key.name === "q") {
+      if (selectionAnchor !== null) {
+        setSelectionAnchor(null);
+        return;
+      }
       renderer.destroy();
       return;
     }
@@ -329,8 +414,29 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
     }
 
     if (key.name === "tab") {
+      setSelectionAnchor(null);
       setFocusedPane((prev) => (prev === "diff" ? "sidebar" : "diff"));
       return;
+    }
+
+    // Diff-pane cursor/selection shortcuts
+    if (focusedPane === "diff" && !currentFolderPath) {
+      if (key.name === "v") {
+        if (selectionAnchor !== null) {
+          setSelectionAnchor(null);
+        } else {
+          setSelectionAnchor(cursorLine);
+        }
+        key.preventDefault();
+        return;
+      }
+
+      if (key.name === "y") {
+        copySelectionToClipboard();
+        setSelectionAnchor(null);
+        key.preventDefault();
+        return;
+      }
     }
 
     if (key.name === "z" && key.ctrl) {
@@ -364,8 +470,19 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
       }
     }
 
-    // Vim-style scroll navigation (diff pane)
+    // Vim-style navigation (diff pane)
     if (scrollbox) {
+      // When the diff pane is focused, j/k move the cursor line and auto-scroll.
+      if (focusedPane === "diff" && !currentFolderPath && (key.name === "j" || key.name === "k")) {
+        if (key.name === "j") {
+          setCursorLine((prev) => clampCursor(prev + 1));
+        } else {
+          setCursorLine((prev) => clampCursor(prev - 1));
+        }
+        key.preventDefault();
+        return;
+      }
+
       // j - scroll down one line
       if (key.name === "j") {
         scrollbox.scrollBy(1, "step");
@@ -382,7 +499,11 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
 
       // G - go to bottom
       if (key.name === "g" && key.shift) {
-        scrollbox.scrollBy(1, "content");
+        if (focusedPane === "diff" && !currentFolderPath) {
+          setCursorLine(maxCursorLine());
+        } else {
+          scrollbox.scrollBy(1, "content");
+        }
         return;
       }
 
@@ -390,7 +511,11 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
       if (key.name === "g" && !key.shift && !key.ctrl) {
         const now = Date.now();
         if (lastKeyRef.current?.key === "g" && now - lastKeyRef.current.time < 300) {
-          scrollbox.scrollTo(0);
+          if (focusedPane === "diff" && !currentFolderPath) {
+            setCursorLine(0);
+          } else {
+            scrollbox.scrollTo(0);
+          }
           lastKeyRef.current = null;
         } else {
           lastKeyRef.current = { key: "g", time: now };
@@ -400,13 +525,21 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
 
       // Ctrl+D - half page down
       if (key.ctrl && key.name === "d") {
-        scrollbox.scrollBy(0.5, "viewport");
+        if (focusedPane === "diff" && !currentFolderPath) {
+          setCursorLine((prev) => clampCursor(prev + Math.floor(scrollbox.viewport.height / 2)));
+        } else {
+          scrollbox.scrollBy(0.5, "viewport");
+        }
         return;
       }
 
       // Ctrl+U - half page up
       if (key.ctrl && key.name === "u") {
-        scrollbox.scrollBy(-0.5, "viewport");
+        if (focusedPane === "diff" && !currentFolderPath) {
+          setCursorLine((prev) => clampCursor(prev - Math.floor(scrollbox.viewport.height / 2)));
+        } else {
+          scrollbox.scrollBy(-0.5, "viewport");
+        }
         return;
       }
     }
@@ -445,6 +578,11 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   const diffPaneWidth = showSidebar
     ? Math.max(20, availableContentWidth - DEFAULT_SIDEBAR_WIDTH - SIDEBAR_GAP)
     : availableContentWidth;
+
+  const diffSelection = React.useMemo(() => {
+    if (selectionAnchor === null) return null;
+    return { start: selectionAnchor, end: cursorLine };
+  }, [selectionAnchor, cursorLine]);
 
   const dropdownOptions = parsedFiles.map((file, idx) => {
     const name = getFileName(file);
@@ -581,6 +719,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
                   themeName={activeTheme}
                   italicsEnabled={italicsEnabled}
                   transparentBackground={transparentBackground}
+                  focused={false}
                 />
               </box>
             );
@@ -629,6 +768,9 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
           themeName={activeTheme}
           italicsEnabled={italicsEnabled}
           transparentBackground={transparentBackground}
+          focused={focusedPane === "diff"}
+          cursorLine={cursorLine}
+          selection={diffSelection}
         />
       </box>
     );
@@ -805,6 +947,16 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
           <text fg={mutedColor}> edit  </text>
           <text fg={textColor}>tab</text>
           <text fg={mutedColor}> focus</text>
+          {focusedPane === "diff" && !currentFolderPath && (
+            <>
+              <text fg={textColor}>  j/k</text>
+              <text fg={mutedColor}> cursor</text>
+              <text fg={textColor}>  v</text>
+              <text fg={mutedColor}> {selectionAnchor !== null ? "stop" : "select"}</text>
+              <text fg={textColor}>  y</text>
+              <text fg={mutedColor}> copy</text>
+            </>
+          )}
           <box flexGrow={1} />
         </box>
       )}
