@@ -51,7 +51,7 @@ The currently highlighted logical line in the diff pane. Visible only when the d
 The logical line where a keyboard selection started (set by pressing `v`). The selection extends from the anchor to the current cursor line.
 
 **Selected diff content**  
-The exact diff lines included in the current selection, preserving `+`/`-` prefixes and `@@` hunk headers. What is highlighted on screen is what gets copied with `y`.
+The exact text shown on screen for the currently selected logical rows, captured from the `DiffRenderable` surface when `y` is pressed. In unified view this is the rendered diff rows; in split view this is the new (right-hand) side. What is highlighted is what gets copied.
 
 **Scrollback mode**  
 Non-interactive output written directly to the terminal scrollback, used when stdout is not a TTY or when `--scrollback` is passed.

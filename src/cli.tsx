@@ -17,7 +17,8 @@ import {
   useTerminalDimensions,
 } from "@opentuah/react";
 import { useCopySelection } from "./hooks/use-copy-selection.js";
-import { buildUnifiedLogicalLines, extractSelectedNewContent } from "./diff-cursor-utils.js";
+import { buildUnifiedLogicalLines } from "./diff-cursor-utils.js";
+import { captureSelectedDiffText } from "./diff-surface-copy.js";
 import { copyToClipboardWithRenderer, copyToClipboardWithRendererSync } from "./clipboard.js";
 import * as React from "react";
 import { exec, execSync, spawnSync } from "child_process";
@@ -38,7 +39,7 @@ import fs from "fs";
 import { join } from "path";
 import Dropdown from "./dropdown.js";
 import { debounce } from "./utils.js";
-import { DiffView, DirectoryTreeView, DEFAULT_SIDEBAR_WIDTH, type DirectoryTreeViewRef } from "./components/index.js";
+import { DiffView, DirectoryTreeView, DEFAULT_SIDEBAR_WIDTH, type DirectoryTreeViewRef, type DiffViewRef } from "./components/index.js";
 // buildDirectoryTree no longer needed — DirectoryTreeView manages its own tree
 import { logger } from "./logger.js";
 import {
@@ -230,6 +231,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   const scrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
   const sidebarScrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
   const sidebarRef = React.useRef<DirectoryTreeViewRef | null>(null);
+  const diffViewRef = React.useRef<DiffViewRef | null>(null);
 
   // Ref for double-tap detection (gg)
   const lastKeyRef = React.useRef<{ key: string; time: number } | null>(null);
@@ -273,14 +275,26 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   const renderer = useRenderer();
   const transparentBg = RGBA.fromInts(0, 0, 0, 0);
 
-  // Copy selected new-content lines + file path as a markdown code block.
+  // Copy selected rows as rendered on screen + file path as a markdown code block.
   const copySelectionToClipboard = React.useCallback(() => {
     const file = currentFileIndex !== undefined ? parsedFiles[currentFileIndex] : undefined;
     if (!file) return;
 
+    const diffRenderable = diffViewRef.current?.getDiffRenderable();
+    if (!diffRenderable) {
+      logger.log("Copy selection unavailable: diff renderable not ready");
+      return;
+    }
+
     const anchor = selectionAnchor ?? cursorLine;
-    const { code, startLineNum } = extractSelectedNewContent(logicalLinesRef.current, anchor, cursorLine);
-    if (!code) return;
+    const { text: code, startLineNum } = captureSelectedDiffText(diffRenderable, {
+      start: anchor,
+      end: cursorLine,
+    });
+    if (!code) {
+      logger.log("Copy selection: no text captured");
+      return;
+    }
 
     const fileName = getFileName(file);
     const oldFileName = getOldFileName(file);
@@ -292,8 +306,8 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
 
     try {
       copyToClipboardWithRendererSync(markdown, renderer);
-    } catch {
-      // Silent fail - user can manually copy if needed
+    } catch (error) {
+      logger.log("Copy selection failed:", error instanceof Error ? error.message : String(error));
     }
   }, [currentFileIndex, cursorLine, parsedFiles, renderer, selectionAnchor]);
 
@@ -762,6 +776,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
           <text fg="#c53b53">-{deletions}</text>
         </box>
         <DiffView
+          ref={diffViewRef}
           diff={file.rawDiff || ""}
           view={viewMode}
           filetype={filetype}

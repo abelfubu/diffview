@@ -7,6 +7,10 @@ import { DiffRenderable, RGBA, SyntaxStyle } from "@opentuah/core"
 import { getSyntaxTheme, getResolvedTheme, rgbaToHex } from "../themes.js"
 import { balanceDelimiters } from "../balance-delimiters.js"
 
+export interface DiffViewRef {
+  getDiffRenderable(): DiffRenderable | null
+}
+
 export interface DiffViewProps {
   diff: string
   view: "split" | "unified"
@@ -84,21 +88,28 @@ function getWordHighlightBg(base: RGBA): string {
   return rgbaToHex(candidate)
 }
 
-export function DiffView({
-  diff,
-  view,
-  filetype,
-  themeName,
-  wrapMode = "word",
-  italicsEnabled = true,
-  transparentBackground = false,
-  focused = false,
-  cursorLine = 0,
-  selection = null,
-  cursorColor,
-  selectionColor,
-}: DiffViewProps): React.ReactNode {
+export const DiffView = React.forwardRef<DiffViewRef, DiffViewProps>(function DiffView(
+  {
+    diff,
+    view,
+    filetype,
+    themeName,
+    wrapMode = "word",
+    italicsEnabled = true,
+    transparentBackground = false,
+    focused = false,
+    cursorLine = 0,
+    selection = null,
+    cursorColor,
+    selectionColor,
+  },
+  ref,
+): React.ReactNode {
   const diffRef = React.useRef<DiffRenderable | null>(null)
+
+  React.useImperativeHandle(ref, () => ({
+    getDiffRenderable: () => diffRef.current,
+  }))
   // Balance paired delimiters (backticks, triple quotes, etc.) before
   // passing to <diff> so tree-sitter doesn't misparse hunks that start
   // inside a multi-line string
@@ -217,4 +228,5 @@ export function DiffView({
       />
     </box>
   )
-}
+})
+

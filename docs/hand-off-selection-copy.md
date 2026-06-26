@@ -120,8 +120,17 @@ Implement a new copy path that captures the exact text of the currently selected
 
 ## Acceptance criteria
 
-- [ ] Pressing `y` copies exactly the lines highlighted by the selection in unified view.
-- [ ] Pressing `y` copies exactly the lines highlighted by the selection in split view (definition of "selected lines" confirmed with user).
-- [ ] The copied content matches the rendered text, not a reconstructed patch.
-- [ ] No regression in existing cursor/selection navigation tests.
-- [ ] Document the final behavior in `docs/adr-cursor-selection.md` and update `CONTEXT.md` if terminology changes.
+- [x] Pressing `y` copies exactly the lines highlighted by the selection in unified view.
+- [x] Pressing `y` copies exactly the lines highlighted by the selection in split view (new/right-hand side by default).
+- [x] The copied content matches the rendered text, not a reconstructed patch.
+- [x] No regression in existing cursor/selection navigation tests.
+- [x] Document the final behavior in `docs/adr-cursor-selection.md` and update `CONTEXT.md` if terminology changes.
+
+## Implementation notes
+
+- Added `src/diff-surface-copy.ts` with `captureSelectedDiffText`, which reads from the private `leftCodeRenderable`/`rightCodeRenderable` fields of `DiffRenderable`.
+- Wired the helper into `copySelectionToClipboard` in `src/cli.tsx` via a forwarded ref on `<DiffView>`.
+- Removed the old `extractSelectedDiffLines`/`extractSelectedNewContent` reconstruction path; `y` now only works when the renderable is reachable, logging a message otherwise.
+- Updated `buildUnifiedLogicalLines` to match opentuah's change-block grouping so cursor/selection indices align with rendered rows.
+- Added tests in `src/diff-surface-copy.test.tsx` covering unified/split views, line numbers, single-line selection, and out-of-bounds indices.
+- Clipboard failures are now logged instead of swallowed.
