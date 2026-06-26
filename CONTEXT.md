@@ -50,8 +50,8 @@ The currently highlighted logical line in the diff pane. Visible only when the d
 **Selection anchor**  
 The logical line where a keyboard selection started (set by pressing `v`). The selection extends from the anchor to the current cursor line.
 
-**New content**  
-The code as it will exist after the change: context lines and added lines from a diff. Removed lines are excluded when copying with `y`.
+**Selected diff content**  
+The exact diff lines included in the current selection, preserving `+`/`-` prefixes and `@@` hunk headers. What is highlighted on screen is what gets copied with `y`.
 
 **Scrollback mode**  
 Non-interactive output written directly to the terminal scrollback, used when stdout is not a TTY or when `--scrollback` is passed.
