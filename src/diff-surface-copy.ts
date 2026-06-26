@@ -87,3 +87,13 @@ export function captureSelectedDiffText(
 
   return { text: selectedLines.join("\n"), startLineNum }
 }
+
+/** Return the number of logical rows rendered by a DiffRenderable. */
+export function getDiffRenderableLineCount(diffRenderable: DiffRenderable | null | undefined): number {
+  if (!diffRenderable) return 0
+  const view = (diffRenderable as unknown as PrivateLineNumberRenderable).view ?? "unified"
+  const codeRenderable = getCodeRenderable(diffRenderable, view)
+  if (!codeRenderable) return 0
+  const text = codeRenderable.plainText
+  return text.length === 0 ? 0 : text.split("\n").length
+}

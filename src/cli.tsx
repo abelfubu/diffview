@@ -18,7 +18,7 @@ import {
 } from "@opentuah/react";
 import { useCopySelection } from "./hooks/use-copy-selection.js";
 import { buildUnifiedLogicalLines } from "./diff-cursor-utils.js";
-import { captureSelectedDiffText } from "./diff-surface-copy.js";
+import { captureSelectedDiffText, getDiffRenderableLineCount } from "./diff-surface-copy.js";
 import { copyToClipboardWithRenderer, copyToClipboardWithRendererSync } from "./clipboard.js";
 import * as React from "react";
 import { exec, execSync, spawnSync } from "child_process";
@@ -239,7 +239,13 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   // Logical diff lines for the currently rendered file, used for bounds and copy
   const logicalLinesRef = React.useRef<ReturnType<typeof buildUnifiedLogicalLines>>([]);
 
-  const maxCursorLine = React.useCallback(() => Math.max(0, logicalLinesRef.current.length - 1), []);
+  const maxCursorLine = React.useCallback(() => {
+    const renderable = diffViewRef.current?.getDiffRenderable();
+    if (renderable) {
+      return Math.max(0, getDiffRenderableLineCount(renderable) - 1);
+    }
+    return Math.max(0, logicalLinesRef.current.length - 1);
+  }, []);
 
   const resetCursor = React.useCallback(() => {
     setCursorLine(0);
@@ -255,10 +261,14 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
     if (!scrollbox) return;
     const viewportTop = scrollbox.scrollTop;
     const viewportHeight = Math.max(1, scrollbox.viewport.height);
+    const margin = 10;
     if (cursorLine < viewportTop) {
-      scrollbox.scrollTo(cursorLine);
+      scrollbox.scrollTo(Math.max(0, cursorLine - margin));
     } else if (cursorLine >= viewportTop + viewportHeight) {
-      scrollbox.scrollTo(Math.max(0, cursorLine - viewportHeight + 1));
+      scrollbox.scrollTo(Math.max(0, cursorLine - viewportHeight + 1 + margin));
+    } else if (cursorLine >= viewportTop + viewportHeight - margin) {
+      // Nearer the bottom edge: scroll down a bit to keep a margin ahead.
+      scrollbox.scrollTo(Math.max(0, cursorLine - viewportHeight + 1 + margin));
     }
   }, [cursorLine]);
 
