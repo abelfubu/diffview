@@ -9,6 +9,7 @@ import "./patch-terminal-dimensions.js";
 
 import { goke, wrapJsonSchema } from "goke";
 import {
+  createPortal,
   createRoot,
   flushSync,
   useKeyboard,
@@ -39,7 +40,7 @@ import fs from "fs";
 import { join } from "path";
 import Dropdown from "./dropdown.js";
 import { debounce } from "./utils.js";
-import { DiffView, DirectoryTreeView, DEFAULT_SIDEBAR_WIDTH, type DirectoryTreeViewRef, type DiffViewRef } from "./components/index.js";
+import { DiffView, DirectoryTreeView, Toast, DEFAULT_SIDEBAR_WIDTH, type DirectoryTreeViewRef, type DiffViewRef } from "./components/index.js";
 // buildDirectoryTree no longer needed — DirectoryTreeView manages its own tree
 import { logger } from "./logger.js";
 import {
@@ -227,6 +228,10 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
   const [cursorLine, setCursorLine] = React.useState(0);
   const [selectionAnchor, setSelectionAnchor] = React.useState<number | null>(null);
 
+  // Transient copy notification shown in the footer
+  const [copyNotification, setCopyNotification] = React.useState<{ message: string; type: "success" | "error" } | null>(null);
+  const copyNotificationTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Refs for scroll functionality
   const scrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
   const sidebarScrollboxRef = React.useRef<ScrollBoxRenderable | null>(null);
@@ -293,6 +298,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
     const diffRenderable = diffViewRef.current?.getDiffRenderable();
     if (!diffRenderable) {
       logger.log("Copy selection unavailable: diff renderable not ready");
+      setCopyNotification({ message: "Copy unavailable: diff not ready", type: "error" });
       return;
     }
 
@@ -303,6 +309,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
     });
     if (!code) {
       logger.log("Copy selection: no text captured");
+      setCopyNotification({ message: "Copy: no text selected", type: "error" });
       return;
     }
 
@@ -316,10 +323,34 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
 
     try {
       copyToClipboardWithRendererSync(markdown, renderer);
+      const lineCount = code.split("\n").length;
+      setCopyNotification({
+        message: `Copied ${lineCount} ${lineCount === 1 ? "line" : "lines"}`,
+        type: "success",
+      });
     } catch (error) {
-      logger.log("Copy selection failed:", error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      logger.log("Copy selection failed:", message);
+      setCopyNotification({ message: `Copy failed: ${message}`, type: "error" });
     }
   }, [currentFileIndex, cursorLine, parsedFiles, renderer, selectionAnchor]);
+
+  // Auto-hide copy notification after a short delay.
+  React.useEffect(() => {
+    if (!copyNotification) return;
+    if (copyNotificationTimeoutRef.current) {
+      clearTimeout(copyNotificationTimeoutRef.current);
+    }
+    copyNotificationTimeoutRef.current = setTimeout(() => {
+      setCopyNotification(null);
+      copyNotificationTimeoutRef.current = null;
+    }, 2000);
+    return () => {
+      if (copyNotificationTimeoutRef.current) {
+        clearTimeout(copyNotificationTimeoutRef.current);
+      }
+    };
+  }, [copyNotification]);
 
   // Force a redraw when transparency is toggled so the terminal background shows through
   React.useEffect(() => {
@@ -811,6 +842,18 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
         backgroundColor: bgColor,
       }}
     >
+      {copyNotification &&
+        createPortal(
+          <Toast
+            message={copyNotification.message}
+            type={copyNotification.type}
+            theme={resolvedTheme}
+            transparentBackground={transparentBackground}
+          />,
+          renderer.root,
+          null,
+        )}
+
       {/* Dropdown overlay - conditionally shown */}
       {showThemePicker && (
         <box style={{ flexShrink: 0, maxHeight: 15 }}>
@@ -985,6 +1028,7 @@ export function App({ parsedFiles }: AppProps): React.ReactNode {
           <box flexGrow={1} />
         </box>
       )}
+
     </box>
   );
 }

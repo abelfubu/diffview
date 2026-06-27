@@ -31,8 +31,9 @@ The original ADR required the diff pane to switch to unified view while focused.
 - The cursor/selection indices still refer to logical rows as used by `highlightLines`, but the actual text comes from the underlying `CodeRenderable` content.
 - In split view the new (right-hand) side is copied by default, because that is the code the agent needs to review or modify after the change.
 - The `balanceDelimiters` mutation is accepted as part of the copied text, since it matches what the user sees.
-- If the renderable cannot be reached (folder view, parse errors, etc.), `y` does nothing and logs a message instead of falling back to the old reconstruction path, so users do not get silently inconsistent output.
-- Clipboard failures are logged rather than swallowed.
+- If the renderable cannot be reached (folder view, parse errors, etc.), `y` shows a transient error toast instead of falling back to the old reconstruction path, so users do not get silently inconsistent output.
+- Successful copies show a centered toast banner (e.g. "✓ Copied 3 lines") that auto-hides after 2 seconds.
+- Clipboard failures show a red error toast rather than being swallowed.
 
 ## Domain glossary additions
 
