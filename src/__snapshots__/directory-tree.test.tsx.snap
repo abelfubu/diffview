@@ -1,0 +1,114 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`TreeRenderer visual tests should render single file 1`] = `
+"  package.json (+1,-1)                            
+                                                  
+                                                  
+                                                  
+                                                  
+"
+`;
+
+exports[`TreeRenderer visual tests should render multiple root files 1`] = `
+"  package.json (+1,-1)                            
+  README.md (+20,-0)                              
+  tsconfig.json (+0,-15)                          
+                                                  
+                                                  
+                                                  
+                                                  
+"
+`;
+
+exports[`TreeRenderer visual tests should render nested directories with indentation 1`] = `
+"  src                                             
+    index.ts (+5,-2)                              
+    utils.ts (+30,-0)                             
+                                                  
+                                                  
+                                                  
+                                                  
+"
+`;
+
+exports[`TreeRenderer visual tests should collapse single-child directories 1`] = `
+"  src/components                                  
+    Button.tsx (+50,-0)                           
+    Input.tsx (+40,-0)                            
+                                                  
+                                                  
+                                                  
+                                                  
+"
+`;
+
+exports[`TreeRenderer visual tests should render complex nested structure 1`] = `
+"  package.json (+2,-1)                                      
+  src                                                       
+    components                                              
+      Button.tsx (+50,-0)                                   
+      Input.tsx (+15,-8)                                    
+    index.ts (+10,-5)                                       
+    utils                                                   
+      helpers.ts (+0,-30)                                   
+  tests                                                     
+    index.test.ts (+25,-0)                                  
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+"
+`;
+
+exports[`TreeRenderer visual tests should handle deeply nested paths with collapse 1`] = `
+"  packages/core/src/lib/utils                               
+    format.ts (+20,-0)                                      
+    helpers.ts (+5,-3)                                      
+                                                            
+                                                            
+                                                            
+                                                            
+"
+`;
+
+exports[`TreeRenderer visual tests should handle sibling directories at different levels 1`] = `
+"  lib                                                       
+    utils.ts (+15,-0)                                       
+  src                                                       
+    api                                                     
+      handlers.ts (+30,-0)                                  
+      routes.ts (+10,-5)                                    
+    db                                                      
+      models.ts (+8,-2)                                     
+                                                            
+                                                            
+                                                            
+                                                            
+"
+`;
+
+exports[`DirectoryTreeView component should render tree without border 1`] = `
+"  󰍔 README.md (-15)                                         
+  󰝰 src                                                     
+    󰛦 index.ts (+5,-2)                                      
+    󰛦 utils.ts (+30)                                        
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+"
+`;
+
+exports[`DirectoryTreeView component should render empty when no files 1`] = `
+"                                        
+                                        
+                                        
+                                        
+                                        
+"
+`;

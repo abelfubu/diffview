@@ -1,0 +1,48 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+tmp
+
+# opensrc - source code for packages
+opensrc/
+
+# local test repo
+test-repo/
+
+# built widget bundles (regenerate with: bun run build:comments-widget)
+cli/public/comments.js
+cli/public/comments.css
+cli/public/agentation-widget.js
+
+.test*

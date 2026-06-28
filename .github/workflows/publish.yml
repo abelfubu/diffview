@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install
+      - run: bun run build
+      - run: bun test
+
+
+  release:
+    runs-on: ubuntu-latest
+    needs: test
+
+    # only run on real pushes to main (not PRs)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write   # needed for npm OIDC
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install
+      - run: bun run build
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # 1. run semantic-release
+      - name: Semantic Release
+        id: semantic
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 2. detect if THIS commit is a release commit
+      - name: Check release tag
+        id: check
+        run: |
+          if git describe --exact-match --tags HEAD >/dev/null 2>&1; then
+            echo "released=true" >> $GITHUB_OUTPUT
+          else
+            echo "released=false" >> $GITHUB_OUTPUT
+          fi
+
+      # 3. publish to npm ONLY if release happened
+      - name: Publish to npm
+        if: steps.check.outputs.released == 'true'
+        run: npm publish --provenance
